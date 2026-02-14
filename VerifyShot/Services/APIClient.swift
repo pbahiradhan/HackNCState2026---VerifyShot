@@ -7,7 +7,7 @@ final class APIClient {
     static let shared = APIClient()
 
     // ⚠️  CHANGE THIS to your deployed Vercel URL
-    private let baseURL = "https://YOUR_VERCEL_APP.vercel.app"
+    private let baseURL = "https://hackncstate.vercel.app"
 
     private init() {}
 

@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────
 //  Backboard.io service — ALL AI operations
 //  OCR, claim extraction, search, analysis, chat
-// ──────────────────────────────────────────────
+//  ──────────────────────────────────────────────
 
 import { BackboardClient } from "backboard-sdk";
 import { Source, ModelVerdict } from "./types";
@@ -34,37 +34,65 @@ async function getOrCreateAssistant(
   return asst.assistantId;
 }
 
-// ── OCR via Backboard.io (using vision model) ──────────────────────────
+// ── OCR via Backboard.io ──────────────────────────
 
 export async function extractTextFromImage(imageUrl: string): Promise<string> {
   const id = await getOrCreateAssistant(
     "VerifyShot-OCR",
-    `You are an OCR assistant. Extract ALL visible text from images exactly as it appears. Include usernames, dates, numbers, hashtags, captions, and any overlaid text. Return ONLY the extracted text, nothing else.`
+    `You are an expert OCR assistant. Extract ALL visible text from images exactly as it appears. Include usernames, dates, numbers, hashtags, captions, and any overlaid text. Return ONLY the extracted text, nothing else. Be thorough and accurate.`
   );
+
   const thread = await bb().createThread(id);
 
-  // Try to use image URL directly (backboard.io may support this)
-  // If not, we'll need to download and convert to base64
-  const response = await bb().addMessage({
+  // Try method 1: Direct image URL in message (if Backboard.io supports it)
+  let response = await bb().addMessage({
     threadId: thread.threadId,
     content: `Extract all text from this image: ${imageUrl}\n\nReturn ONLY the extracted text, nothing else.`,
     stream: false,
+    memory: "Auto",
   });
 
   let text = response.content?.trim() || "";
 
-  // If no text, try a more explicit prompt
+  // If that didn't work, try method 2: Upload as document
+  if (!text || text.length < 10) {
+    try {
+      const imageResponse = await fetch(imageUrl);
+      if (imageResponse.ok) {
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+        const filename = `screenshot-${Date.now()}.jpg`;
+        
+        // Try uploading as document (may require file path or different API)
+        // For now, we'll use a workaround: base64 in message
+        const base64 = imageBuffer.toString("base64");
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
+        
+        response = await bb().addMessage({
+          threadId: thread.threadId,
+          content: `Extract all text from this image (base64): ${dataUrl}\n\nReturn ONLY the extracted text.`,
+          stream: false,
+          memory: "Auto",
+        });
+        text = response.content?.trim() || "";
+      }
+    } catch (e) {
+      console.warn("Document upload fallback failed:", e);
+    }
+  }
+
+  // If still no text, try a more explicit prompt
   if (!text || text.length < 10) {
     const fallback = await bb().addMessage({
       threadId: thread.threadId,
-      content: "What text is visible in the image? List all text exactly as it appears, line by line.",
+      content: `What text is visible in the image at ${imageUrl}? List all text exactly as it appears, line by line. Include any numbers, dates, usernames, hashtags, or captions.`,
       stream: false,
+      memory: "Auto",
     });
     text = fallback.content?.trim() || "";
   }
 
   if (!text || text.length < 5) {
-    throw new Error("OCR failed: No text extracted from image");
+    throw new Error("OCR failed: No text extracted from image. The image may not contain readable text.");
   }
 
   return text;
@@ -75,24 +103,40 @@ export async function extractTextFromImage(imageUrl: string): Promise<string> {
 export async function extractClaims(ocrText: string): Promise<string[]> {
   const id = await getOrCreateAssistant(
     "VerifyShot-ClaimExtractor",
-    `You are a fact-extraction assistant. Given OCR text, extract 1-3 concrete factual claims (not opinions or questions). Return ONLY a JSON array of strings. Example: ["Claim one","Claim two"]`
+    `You are a fact-extraction assistant specialized in identifying factual claims from text. 
+    
+Your task:
+- Extract 1-3 concrete, verifiable factual claims (not opinions, questions, or statements of intent)
+- Each claim should be a standalone statement that can be fact-checked
+- Return ONLY a JSON array of strings, no other text
+
+Example output: ["Claim one here","Claim two here"]`
   );
   const thread = await bb().createThread(id);
   const resp = await bb().addMessage({
     threadId: thread.threadId,
-    content: `OCR TEXT:\n\"\"\"\n${ocrText}\n\"\"\"\n\nExtract 1-3 factual claims. Return JSON array only.`,
+    content: `OCR TEXT:\n\"\"\"\n${ocrText}\n\"\"\"\n\nExtract 1-3 factual claims that can be verified. Return JSON array only, no markdown, no explanation.`,
     stream: false,
+    memory: "Auto",
   });
   try {
     let content = resp.content.trim();
     if (content.startsWith("```")) {
       content = content.replace(/```(?:json)?\n?/g, "").trim();
     }
+    // Remove any trailing markdown or explanation
+    const jsonMatch = content.match(/\[.*\]/);
+    if (jsonMatch) content = jsonMatch[0];
     const arr = JSON.parse(content);
-    if (Array.isArray(arr)) return arr.slice(0, 3);
-  } catch { /* fallback below */ }
+    if (Array.isArray(arr) && arr.length > 0) {
+      return arr.slice(0, 3).filter((c: any) => typeof c === "string" && c.length > 10);
+    }
+  } catch (e) {
+    console.warn("Failed to parse claims JSON:", e);
+  }
   // Fallback: first sentence
-  return [ocrText.split(/[.!?]/)[0].trim() + "."];
+  const firstSentence = ocrText.split(/[.!?]/)[0].trim();
+  return firstSentence.length > 10 ? [firstSentence + "."] : [ocrText.slice(0, 200) + "..."];
 }
 
 // ── Search sources (via tool call) ──────────────────────────
@@ -101,24 +145,32 @@ export async function searchSourcesForClaim(claim: string): Promise<Source[]> {
   // Create assistant with web_search tool
   const id = await getOrCreateAssistant(
     "VerifyShot-Searcher",
-    `You are a research assistant. Use the web_search tool to find recent, reliable sources about factual claims.`,
+    `You are a research assistant specialized in finding reliable, recent sources for fact-checking. 
+    
+When given a claim, use the web_search tool to find:
+- Recent articles (preferably within the last year)
+- Reputable news sources, academic papers, or fact-checking sites
+- Multiple independent sources that corroborate or refute the claim
+
+Always use the web_search tool when asked to find sources.`,
     [getWebSearchTool()]
   );
   const thread = await bb().createThread(id);
 
   const resp = await bb().addMessage({
     threadId: thread.threadId,
-    content: `Search for recent, reliable sources about this claim: "${claim}". Use the web_search tool.`,
+    content: `Search for recent, reliable sources about this claim: "${claim}". Use the web_search tool to find at least 5 sources.`,
     stream: false,
+    memory: "Auto",
   });
 
-  // If tool call is required, handle it
+  // Handle tool call
   if (resp.status === "REQUIRES_ACTION" && resp.toolCalls) {
     const toolOutputs = [];
     for (const tc of resp.toolCalls) {
       if (tc.function.name === "web_search") {
         const args = tc.function.parsedArguments || JSON.parse(tc.function.arguments || "{}");
-        const sources = await searchSources(args.query, args.limit || 5);
+        const sources = await searchSources(args.query || claim, args.limit || 5);
         toolOutputs.push({
           toolCallId: tc.id,
           output: JSON.stringify(sources),
@@ -126,19 +178,30 @@ export async function searchSourcesForClaim(claim: string): Promise<Source[]> {
       }
     }
 
-    // Submit tool outputs and get final response
-    const finalResp = await bb().submitToolOutputs({
-      threadId: thread.threadId,
-      runId: resp.runId,
-      toolOutputs,
-    });
+    if (toolOutputs.length > 0) {
+      // Submit tool outputs and get final response
+      const finalResp = await bb().submitToolOutputs({
+        threadId: thread.threadId,
+        runId: resp.runId,
+        toolOutputs,
+      });
 
-    // Parse sources from response or use the tool output directly
-    // For now, return the sources we got from the tool
-    return await searchSources(claim, 5);
+      // Return the sources we found (the assistant may reference them in its response)
+      // We parse from the tool output, not the assistant's text response
+      const allSources: Source[] = [];
+      for (const output of toolOutputs) {
+        try {
+          const parsed = JSON.parse(output.output);
+          if (Array.isArray(parsed)) {
+            allSources.push(...parsed);
+          }
+        } catch {}
+      }
+      return allSources.length > 0 ? allSources.slice(0, 5) : await searchSources(claim, 5);
+    }
   }
 
-  // If no tool call, fall back to direct search
+  // If no tool call was made, fall back to direct search
   return await searchSources(claim, 5);
 }
 
@@ -154,8 +217,19 @@ export async function analyzeClaimWithSources(
 }> {
   const id = await getOrCreateAssistant(
     "VerifyShot-Analyzer",
-    `You are a concise fact-checker. Given a claim and sources, return JSON:
-{"verdict":"likely_true"|"mixed"|"likely_misleading","confidence":0.0-1.0,"explanation":"2-line explanation"}`
+    `You are an expert fact-checker. Analyze claims against provided sources and return structured JSON.
+
+Your analysis should:
+1. Determine if the claim is supported, contradicted, or mixed by the sources
+2. Assess confidence (0.0-1.0) based on source quality and agreement
+3. Provide a clear 2-3 sentence explanation
+
+Return ONLY valid JSON:
+{
+  "verdict": "likely_true" | "mixed" | "likely_misleading",
+  "confidence": 0.0-1.0,
+  "explanation": "2-3 sentence explanation"
+}`
   );
   const thread = await bb().createThread(id);
   const srcBlock = sources
@@ -164,8 +238,9 @@ export async function analyzeClaimWithSources(
 
   const resp = await bb().addMessage({
     threadId: thread.threadId,
-    content: `Claim: "${claim}"\n\nSources:\n${srcBlock}\n\nReturn JSON only.`,
+    content: `Claim: "${claim}"\n\nSources:\n${srcBlock}\n\nAnalyze and return JSON only.`,
     stream: false,
+    memory: "Auto",
   });
 
   try {
@@ -173,56 +248,78 @@ export async function analyzeClaimWithSources(
     if (content.startsWith("```")) {
       content = content.replace(/```(?:json)?\n?/g, "").trim();
     }
+    // Extract JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) content = jsonMatch[0];
     const r = JSON.parse(content);
     return {
       verdict: r.verdict ?? "mixed",
-      confidence: r.confidence ?? 0.5,
+      confidence: Math.max(0, Math.min(1, r.confidence ?? 0.5)),
       explanation: r.explanation ?? "Analysis pending.",
     };
-  } catch {
+  } catch (e) {
+    console.warn("Failed to parse verdict JSON:", e);
     return { verdict: "mixed", confidence: 0.5, explanation: "Could not auto-analyze." };
   }
 }
 
 // ── Multi-model consensus ──
+// Note: Backboard.io uses its default model. We simulate consensus by asking
+// the same assistant multiple times with slightly different framing.
 
 export async function getModelConsensus(
   claim: string,
   sources: Source[]
 ): Promise<ModelVerdict[]> {
-  // Use different models via backboard.io
-  // Backboard.io should allow model selection, but for now we'll use the default
-  const models = [
-    { name: "GPT-4", prompt: "You are GPT-4 analyzing a factual claim." },
-    { name: "Claude 3", prompt: "You are Claude 3 analyzing a factual claim." },
-    { name: "Gemini", prompt: "You are Gemini analyzing a factual claim." },
-  ];
-
   const srcBlock = sources
     .map((s, i) => `[${i + 1}] ${s.title} (${s.domain}): ${s.snippet}`)
     .join("\n");
 
+  // Use different analytical perspectives (simulating different models)
+  const perspectives = [
+    {
+      name: "GPT-4",
+      prompt: "You are an analytical AI model (GPT-4 style). Analyze claims with logical reasoning and evidence-based evaluation.",
+    },
+    {
+      name: "Claude 3",
+      prompt: "You are an analytical AI model (Claude 3 style). Analyze claims with careful consideration of context and nuance.",
+    },
+    {
+      name: "Gemini",
+      prompt: "You are an analytical AI model (Gemini style). Analyze claims with a focus on factual accuracy and source verification.",
+    },
+  ];
+
   const verdicts = await Promise.all(
-    models.map(async (m) => {
+    perspectives.map(async (p) => {
       try {
         const id = await getOrCreateAssistant(
-          `VerifyShot-Consensus-${m.name}`,
-          `${m.prompt} Return JSON: {"agrees":true|false,"confidence":0.0-1.0}`
+          `VerifyShot-Consensus-${p.name}`,
+          `${p.prompt} Return ONLY valid JSON: {"agrees":true|false,"confidence":0.0-1.0}`
         );
         const thread = await bb().createThread(id);
         const resp = await bb().addMessage({
           threadId: thread.threadId,
           content: `Is this claim supported by the sources?\nClaim: "${claim}"\nSources:\n${srcBlock}\nReturn JSON only.`,
           stream: false,
+          memory: "Auto",
         });
         let content = resp.content.trim();
         if (content.startsWith("```")) {
           content = content.replace(/```(?:json)?\n?/g, "").trim();
         }
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) content = jsonMatch[0];
         const r = JSON.parse(content);
-        return { modelName: m.name, agrees: !!r.agrees, confidence: r.confidence ?? 0.5 };
-      } catch {
-        return { modelName: m.name, agrees: false, confidence: 0 };
+        return {
+          modelName: p.name,
+          agrees: !!r.agrees,
+          confidence: Math.max(0, Math.min(1, r.confidence ?? 0.5)),
+        };
+      } catch (e) {
+        console.warn(`Consensus check failed for ${p.name}:`, e);
+        return { modelName: p.name, agrees: false, confidence: 0 };
       }
     })
   );
@@ -238,21 +335,30 @@ export async function generateSummary(
 ): Promise<string> {
   const id = await getOrCreateAssistant(
     "VerifyShot-Summarizer",
-    "You write concise 2-3 sentence summaries of fact-check results. Be direct and informative."
+    `You are a concise fact-checking summary writer. Create clear, informative 2-3 sentence summaries of fact-check results.
+
+Your summaries should:
+- Highlight the main claim(s) and their verdicts
+- Mention the overall trust score
+- Be direct and easy to understand
+- Avoid jargon`
   );
   const thread = await bb().createThread(id);
-  const claimList = claims.map((c) => `• "${c.text}" → ${c.verdict} (score ${c.trustScore})`).join("\n");
+  const claimList = claims
+    .map((c) => `• "${c.text}" → ${c.verdict} (trust score: ${c.trustScore}%)`)
+    .join("\n");
   const resp = await bb().addMessage({
     threadId: thread.threadId,
-    content: `Summarize in 2-3 sentences:\nOCR text: "${ocrText.slice(0, 300)}"\nClaims:\n${claimList}`,
+    content: `Summarize these fact-check results in 2-3 sentences:\n\nOriginal text: "${ocrText.slice(0, 300)}"\n\nClaims analyzed:\n${claimList}`,
     stream: false,
+    memory: "Auto",
   });
   return resp.content.trim();
 }
 
-// ── Chat (keeps thread alive) ─────────────────
+// ── Chat (keeps thread alive with memory) ─────────────────
 
-const chatThreads: Record<string, string> = {}; // jobId → threadId
+const chatThreads: Record<string, string> = {}; // jobId-mode → threadId
 
 export async function chatAboutJob(
   jobId: string,
@@ -263,12 +369,32 @@ export async function chatAboutJob(
   const hasContext = contextText && contextText.length > 10;
 
   const standardPrompt = hasContext
-    ? `You are a focused research assistant. The user has a screenshot with these details:\n${contextText}\nOnly answer about this topic. Reference specific sources. If uncertain, say "unverified" and suggest how to confirm.`
-    : `You are a helpful fact-checking assistant. The user is asking you to verify claims or answer questions. Provide clear, factual answers. If uncertain, say "unverified" and suggest how to confirm. Be concise.`;
+    ? `You are a focused research assistant helping users verify information from screenshots.
+
+Context from screenshot analysis:
+${contextText}
+
+Guidelines:
+- Answer questions about the screenshot's claims and sources
+- Reference specific sources when available
+- If uncertain, say "unverified" and suggest how to confirm
+- Be concise and helpful
+- Use the web_search tool if you need more recent information`
+    : `You are a helpful fact-checking assistant. Users ask you to verify claims or answer questions.
+
+Guidelines:
+- Provide clear, factual answers
+- If uncertain, say "unverified" and suggest how to confirm
+- Be concise
+- Use the web_search tool if you need to find sources`;
 
   const deepResearchPrompt = hasContext
-    ? `You are an expert research analyst doing deep research. The user has a screenshot with these details:\n${contextText}\n
-Provide a thorough, structured analysis:
+    ? `You are an expert research analyst conducting deep research on a screenshot's claims.
+
+Context from screenshot analysis:
+${contextText}
+
+Provide a thorough, structured analysis with these sections:
 1. **Key Findings** — What the evidence shows
 2. **Source Analysis** — Quality and reliability of available sources
 3. **Multiple Perspectives** — Different viewpoints on this topic
@@ -276,10 +402,10 @@ Provide a thorough, structured analysis:
 5. **Confidence Level** — How confident are we in the conclusions
 6. **Recommendations** — What the user should know or do
 
-Be detailed and thorough. Reference specific sources. Use markdown formatting.`
-    : `You are an expert research analyst. The user wants a thorough investigation of a topic or claim.
+Always use the web_search tool to find additional recent sources. Be detailed and thorough. Reference specific sources. Use markdown formatting.`
+    : `You are an expert research analyst. Users want thorough investigations of topics or claims.
 
-Provide a detailed, structured analysis:
+Provide a detailed, structured analysis with these sections:
 1. **Key Findings** — What the evidence shows
 2. **Source Analysis** — Quality and reliability of available information
 3. **Multiple Perspectives** — Different viewpoints
@@ -287,15 +413,16 @@ Provide a detailed, structured analysis:
 5. **Confidence Level** — How confident are we
 6. **Recommendations** — Key takeaways
 
-Be thorough and analytical. Use markdown formatting.`;
+Always use the web_search tool to find recent sources. Be thorough and analytical. Use markdown formatting.`;
 
   const systemPrompt = mode === "deep_research" ? deepResearchPrompt : standardPrompt;
   const assistantName = mode === "deep_research" ? "VerifyShot-DeepResearch" : "VerifyShot-Chat";
 
+  // Both modes get web search tool for better responses
   const id = await getOrCreateAssistant(
     assistantName,
     systemPrompt,
-    mode === "deep_research" ? [getWebSearchTool()] : undefined
+    [getWebSearchTool()]
   );
 
   let threadId = chatThreads[`${jobId}-${mode}`];
@@ -309,10 +436,10 @@ Be thorough and analytical. Use markdown formatting.`;
     threadId,
     content: userMessage,
     stream: false,
-    memory: "Auto",
+    memory: "Auto", // Enable persistent memory
   });
 
-  // Handle tool calls for deep research (web search)
+  // Handle tool calls (web search)
   if (resp.status === "REQUIRES_ACTION" && resp.toolCalls) {
     const toolOutputs = [];
     for (const tc of resp.toolCalls) {
