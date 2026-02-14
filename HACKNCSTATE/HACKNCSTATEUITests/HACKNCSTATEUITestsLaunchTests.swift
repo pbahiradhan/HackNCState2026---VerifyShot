@@ -1,13 +1,13 @@
 //
-//  VerifyShotAppXCODEUITestsLaunchTests.swift
-//  VerifyShotAppXCODEUITests
+//  HACKNCSTATEUITestsLaunchTests.swift
+//  HACKNCSTATEUITests
 //
 //  Created by Piragith Bahiradhan on 2/14/26.
 //
 
 import XCTest
 
-final class VerifyShotAppXCODEUITestsLaunchTests: XCTestCase {
+final class HACKNCSTATEUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

@@ -7,75 +7,75 @@
 	objects = {
 
 /* Begin PBXContainerItemProxy section */
-		976C5B2B2F40F4FD00408F91 /* PBXContainerItemProxy */ = {
+		976C5C562F410E3F00408F91 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 976C5B122F40F4FB00408F91 /* Project object */;
+			containerPortal = 976C5C3D2F410E3D00408F91 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 976C5B192F40F4FB00408F91;
-			remoteInfo = VerifyShotAppXCODE;
+			remoteGlobalIDString = 976C5C442F410E3D00408F91;
+			remoteInfo = HACKNCSTATE;
 		};
-		976C5B352F40F4FD00408F91 /* PBXContainerItemProxy */ = {
+		976C5C602F410E3F00408F91 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 976C5B122F40F4FB00408F91 /* Project object */;
+			containerPortal = 976C5C3D2F410E3D00408F91 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 976C5B192F40F4FB00408F91;
-			remoteInfo = VerifyShotAppXCODE;
+			remoteGlobalIDString = 976C5C442F410E3D00408F91;
+			remoteInfo = HACKNCSTATE;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		976C5B1A2F40F4FB00408F91 /* VerifyShotAppXCODE.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VerifyShotAppXCODE.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		976C5B2A2F40F4FD00408F91 /* VerifyShotAppXCODETests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VerifyShotAppXCODETests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		976C5B342F40F4FD00408F91 /* VerifyShotAppXCODEUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VerifyShotAppXCODEUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		976C5C452F410E3D00408F91 /* HACKNCSTATE.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HACKNCSTATE.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		976C5C552F410E3F00408F91 /* HACKNCSTATETests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HACKNCSTATETests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		976C5C5F2F410E3F00408F91 /* HACKNCSTATEUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HACKNCSTATEUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		976C5C162F410A4A00408F91 /* Exceptions for "VerifyShotAppXCODE" folder in "VerifyShotAppXCODE" target */ = {
+		976C5C982F410E6300408F91 /* Exceptions for "HACKNCSTATE" folder in "HACKNCSTATE" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				VerifyShot/Info.plist,
 			);
-			target = 976C5B192F40F4FB00408F91 /* VerifyShotAppXCODE */;
+			target = 976C5C442F410E3D00408F91 /* HACKNCSTATE */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		976C5B1C2F40F4FB00408F91 /* VerifyShotAppXCODE */ = {
+		976C5C472F410E3D00408F91 /* HACKNCSTATE */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				976C5C162F410A4A00408F91 /* Exceptions for "VerifyShotAppXCODE" folder in "VerifyShotAppXCODE" target */,
+				976C5C982F410E6300408F91 /* Exceptions for "HACKNCSTATE" folder in "HACKNCSTATE" target */,
 			);
-			path = VerifyShotAppXCODE;
+			path = HACKNCSTATE;
 			sourceTree = "<group>";
 		};
-		976C5B2D2F40F4FD00408F91 /* VerifyShotAppXCODETests */ = {
+		976C5C582F410E3F00408F91 /* HACKNCSTATETests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = VerifyShotAppXCODETests;
+			path = HACKNCSTATETests;
 			sourceTree = "<group>";
 		};
-		976C5B372F40F4FD00408F91 /* VerifyShotAppXCODEUITests */ = {
+		976C5C622F410E3F00408F91 /* HACKNCSTATEUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = VerifyShotAppXCODEUITests;
+			path = HACKNCSTATEUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		976C5B172F40F4FB00408F91 /* Frameworks */ = {
+		976C5C422F410E3D00408F91 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		976C5B272F40F4FD00408F91 /* Frameworks */ = {
+		976C5C522F410E3F00408F91 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		976C5B312F40F4FD00408F91 /* Frameworks */ = {
+		976C5C5C2F410E3F00408F91 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -85,22 +85,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		976C5B112F40F4FB00408F91 = {
+		976C5C3C2F410E3D00408F91 = {
 			isa = PBXGroup;
 			children = (
-				976C5B1C2F40F4FB00408F91 /* VerifyShotAppXCODE */,
-				976C5B2D2F40F4FD00408F91 /* VerifyShotAppXCODETests */,
-				976C5B372F40F4FD00408F91 /* VerifyShotAppXCODEUITests */,
-				976C5B1B2F40F4FB00408F91 /* Products */,
+				976C5C472F410E3D00408F91 /* HACKNCSTATE */,
+				976C5C582F410E3F00408F91 /* HACKNCSTATETests */,
+				976C5C622F410E3F00408F91 /* HACKNCSTATEUITests */,
+				976C5C462F410E3D00408F91 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		976C5B1B2F40F4FB00408F91 /* Products */ = {
+		976C5C462F410E3D00408F91 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				976C5B1A2F40F4FB00408F91 /* VerifyShotAppXCODE.app */,
-				976C5B2A2F40F4FD00408F91 /* VerifyShotAppXCODETests.xctest */,
-				976C5B342F40F4FD00408F91 /* VerifyShotAppXCODEUITests.xctest */,
+				976C5C452F410E3D00408F91 /* HACKNCSTATE.app */,
+				976C5C552F410E3F00408F91 /* HACKNCSTATETests.xctest */,
+				976C5C5F2F410E3F00408F91 /* HACKNCSTATEUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -108,134 +108,134 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		976C5B192F40F4FB00408F91 /* VerifyShotAppXCODE */ = {
+		976C5C442F410E3D00408F91 /* HACKNCSTATE */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 976C5B3E2F40F4FD00408F91 /* Build configuration list for PBXNativeTarget "VerifyShotAppXCODE" */;
+			buildConfigurationList = 976C5C692F410E3F00408F91 /* Build configuration list for PBXNativeTarget "HACKNCSTATE" */;
 			buildPhases = (
-				976C5B162F40F4FB00408F91 /* Sources */,
-				976C5B172F40F4FB00408F91 /* Frameworks */,
-				976C5B182F40F4FB00408F91 /* Resources */,
+				976C5C412F410E3D00408F91 /* Sources */,
+				976C5C422F410E3D00408F91 /* Frameworks */,
+				976C5C432F410E3D00408F91 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				976C5B1C2F40F4FB00408F91 /* VerifyShotAppXCODE */,
+				976C5C472F410E3D00408F91 /* HACKNCSTATE */,
 			);
-			name = VerifyShotAppXCODE;
+			name = HACKNCSTATE;
 			packageProductDependencies = (
 			);
-			productName = VerifyShotAppXCODE;
-			productReference = 976C5B1A2F40F4FB00408F91 /* VerifyShotAppXCODE.app */;
+			productName = HACKNCSTATE;
+			productReference = 976C5C452F410E3D00408F91 /* HACKNCSTATE.app */;
 			productType = "com.apple.product-type.application";
 		};
-		976C5B292F40F4FD00408F91 /* VerifyShotAppXCODETests */ = {
+		976C5C542F410E3F00408F91 /* HACKNCSTATETests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 976C5B412F40F4FD00408F91 /* Build configuration list for PBXNativeTarget "VerifyShotAppXCODETests" */;
+			buildConfigurationList = 976C5C6C2F410E3F00408F91 /* Build configuration list for PBXNativeTarget "HACKNCSTATETests" */;
 			buildPhases = (
-				976C5B262F40F4FD00408F91 /* Sources */,
-				976C5B272F40F4FD00408F91 /* Frameworks */,
-				976C5B282F40F4FD00408F91 /* Resources */,
+				976C5C512F410E3F00408F91 /* Sources */,
+				976C5C522F410E3F00408F91 /* Frameworks */,
+				976C5C532F410E3F00408F91 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				976C5B2C2F40F4FD00408F91 /* PBXTargetDependency */,
+				976C5C572F410E3F00408F91 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				976C5B2D2F40F4FD00408F91 /* VerifyShotAppXCODETests */,
+				976C5C582F410E3F00408F91 /* HACKNCSTATETests */,
 			);
-			name = VerifyShotAppXCODETests;
+			name = HACKNCSTATETests;
 			packageProductDependencies = (
 			);
-			productName = VerifyShotAppXCODETests;
-			productReference = 976C5B2A2F40F4FD00408F91 /* VerifyShotAppXCODETests.xctest */;
+			productName = HACKNCSTATETests;
+			productReference = 976C5C552F410E3F00408F91 /* HACKNCSTATETests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		976C5B332F40F4FD00408F91 /* VerifyShotAppXCODEUITests */ = {
+		976C5C5E2F410E3F00408F91 /* HACKNCSTATEUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 976C5B442F40F4FD00408F91 /* Build configuration list for PBXNativeTarget "VerifyShotAppXCODEUITests" */;
+			buildConfigurationList = 976C5C6F2F410E3F00408F91 /* Build configuration list for PBXNativeTarget "HACKNCSTATEUITests" */;
 			buildPhases = (
-				976C5B302F40F4FD00408F91 /* Sources */,
-				976C5B312F40F4FD00408F91 /* Frameworks */,
-				976C5B322F40F4FD00408F91 /* Resources */,
+				976C5C5B2F410E3F00408F91 /* Sources */,
+				976C5C5C2F410E3F00408F91 /* Frameworks */,
+				976C5C5D2F410E3F00408F91 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				976C5B362F40F4FD00408F91 /* PBXTargetDependency */,
+				976C5C612F410E3F00408F91 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				976C5B372F40F4FD00408F91 /* VerifyShotAppXCODEUITests */,
+				976C5C622F410E3F00408F91 /* HACKNCSTATEUITests */,
 			);
-			name = VerifyShotAppXCODEUITests;
+			name = HACKNCSTATEUITests;
 			packageProductDependencies = (
 			);
-			productName = VerifyShotAppXCODEUITests;
-			productReference = 976C5B342F40F4FD00408F91 /* VerifyShotAppXCODEUITests.xctest */;
+			productName = HACKNCSTATEUITests;
+			productReference = 976C5C5F2F410E3F00408F91 /* HACKNCSTATEUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		976C5B122F40F4FB00408F91 /* Project object */ = {
+		976C5C3D2F410E3D00408F91 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
 				LastUpgradeCheck = 1620;
 				TargetAttributes = {
-					976C5B192F40F4FB00408F91 = {
+					976C5C442F410E3D00408F91 = {
 						CreatedOnToolsVersion = 16.2;
 					};
-					976C5B292F40F4FD00408F91 = {
+					976C5C542F410E3F00408F91 = {
 						CreatedOnToolsVersion = 16.2;
-						TestTargetID = 976C5B192F40F4FB00408F91;
+						TestTargetID = 976C5C442F410E3D00408F91;
 					};
-					976C5B332F40F4FD00408F91 = {
+					976C5C5E2F410E3F00408F91 = {
 						CreatedOnToolsVersion = 16.2;
-						TestTargetID = 976C5B192F40F4FB00408F91;
+						TestTargetID = 976C5C442F410E3D00408F91;
 					};
 				};
 			};
-			buildConfigurationList = 976C5B152F40F4FB00408F91 /* Build configuration list for PBXProject "VerifyShotAppXCODE" */;
+			buildConfigurationList = 976C5C402F410E3D00408F91 /* Build configuration list for PBXProject "HACKNCSTATE" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 976C5B112F40F4FB00408F91;
+			mainGroup = 976C5C3C2F410E3D00408F91;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 976C5B1B2F40F4FB00408F91 /* Products */;
+			productRefGroup = 976C5C462F410E3D00408F91 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				976C5B192F40F4FB00408F91 /* VerifyShotAppXCODE */,
-				976C5B292F40F4FD00408F91 /* VerifyShotAppXCODETests */,
-				976C5B332F40F4FD00408F91 /* VerifyShotAppXCODEUITests */,
+				976C5C442F410E3D00408F91 /* HACKNCSTATE */,
+				976C5C542F410E3F00408F91 /* HACKNCSTATETests */,
+				976C5C5E2F410E3F00408F91 /* HACKNCSTATEUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		976C5B182F40F4FB00408F91 /* Resources */ = {
+		976C5C432F410E3D00408F91 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		976C5B282F40F4FD00408F91 /* Resources */ = {
+		976C5C532F410E3F00408F91 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		976C5B322F40F4FD00408F91 /* Resources */ = {
+		976C5C5D2F410E3F00408F91 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -245,21 +245,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		976C5B162F40F4FB00408F91 /* Sources */ = {
+		976C5C412F410E3D00408F91 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		976C5B262F40F4FD00408F91 /* Sources */ = {
+		976C5C512F410E3F00408F91 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		976C5B302F40F4FD00408F91 /* Sources */ = {
+		976C5C5B2F410E3F00408F91 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -269,20 +269,20 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		976C5B2C2F40F4FD00408F91 /* PBXTargetDependency */ = {
+		976C5C572F410E3F00408F91 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 976C5B192F40F4FB00408F91 /* VerifyShotAppXCODE */;
-			targetProxy = 976C5B2B2F40F4FD00408F91 /* PBXContainerItemProxy */;
+			target = 976C5C442F410E3D00408F91 /* HACKNCSTATE */;
+			targetProxy = 976C5C562F410E3F00408F91 /* PBXContainerItemProxy */;
 		};
-		976C5B362F40F4FD00408F91 /* PBXTargetDependency */ = {
+		976C5C612F410E3F00408F91 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 976C5B192F40F4FB00408F91 /* VerifyShotAppXCODE */;
-			targetProxy = 976C5B352F40F4FD00408F91 /* PBXContainerItemProxy */;
+			target = 976C5C442F410E3D00408F91 /* HACKNCSTATE */;
+			targetProxy = 976C5C602F410E3F00408F91 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		976C5B3C2F40F4FD00408F91 /* Debug */ = {
+		976C5C672F410E3F00408F91 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -345,7 +345,7 @@
 			};
 			name = Debug;
 		};
-		976C5B3D2F40F4FD00408F91 /* Release */ = {
+		976C5C682F410E3F00408F91 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -401,14 +401,14 @@
 			};
 			name = Release;
 		};
-		976C5B3F2F40F4FD00408F91 /* Debug */ = {
+		976C5C6A2F410E3F00408F91 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"VerifyShotAppXCODE/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"HACKNCSTATE/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VerifyShot needs access to save analysis results.";
@@ -423,7 +423,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.VerifyShotAppXCODE";
+				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.HACKNCSTATE";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -431,14 +431,14 @@
 			};
 			name = Debug;
 		};
-		976C5B402F40F4FD00408F91 /* Release */ = {
+		976C5C6B2F410E3F00408F91 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"VerifyShotAppXCODE/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"HACKNCSTATE/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VerifyShot needs access to save analysis results.";
@@ -453,7 +453,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.VerifyShotAppXCODE";
+				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.HACKNCSTATE";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -461,7 +461,7 @@
 			};
 			name = Release;
 		};
-		976C5B422F40F4FD00408F91 /* Debug */ = {
+		976C5C6D2F410E3F00408F91 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -470,16 +470,16 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.VerifyShotAppXCODETests";
+				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.HACKNCSTATETests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VerifyShotAppXCODE.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VerifyShotAppXCODE";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HACKNCSTATE.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HACKNCSTATE";
 			};
 			name = Debug;
 		};
-		976C5B432F40F4FD00408F91 /* Release */ = {
+		976C5C6E2F410E3F00408F91 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -488,87 +488,87 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.VerifyShotAppXCODETests";
+				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.HACKNCSTATETests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VerifyShotAppXCODE.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VerifyShotAppXCODE";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HACKNCSTATE.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HACKNCSTATE";
 			};
 			name = Release;
 		};
-		976C5B452F40F4FD00408F91 /* Debug */ = {
+		976C5C702F410E3F00408F91 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.VerifyShotAppXCODEUITests";
+				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.HACKNCSTATEUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = VerifyShotAppXCODE;
+				TEST_TARGET_NAME = HACKNCSTATE;
 			};
 			name = Debug;
 		};
-		976C5B462F40F4FD00408F91 /* Release */ = {
+		976C5C712F410E3F00408F91 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.VerifyShotAppXCODEUITests";
+				PRODUCT_BUNDLE_IDENTIFIER = "Piragith-Bahiradhan.HACKNCSTATEUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = VerifyShotAppXCODE;
+				TEST_TARGET_NAME = HACKNCSTATE;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		976C5B152F40F4FB00408F91 /* Build configuration list for PBXProject "VerifyShotAppXCODE" */ = {
+		976C5C402F410E3D00408F91 /* Build configuration list for PBXProject "HACKNCSTATE" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				976C5B3C2F40F4FD00408F91 /* Debug */,
-				976C5B3D2F40F4FD00408F91 /* Release */,
+				976C5C672F410E3F00408F91 /* Debug */,
+				976C5C682F410E3F00408F91 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		976C5B3E2F40F4FD00408F91 /* Build configuration list for PBXNativeTarget "VerifyShotAppXCODE" */ = {
+		976C5C692F410E3F00408F91 /* Build configuration list for PBXNativeTarget "HACKNCSTATE" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				976C5B3F2F40F4FD00408F91 /* Debug */,
-				976C5B402F40F4FD00408F91 /* Release */,
+				976C5C6A2F410E3F00408F91 /* Debug */,
+				976C5C6B2F410E3F00408F91 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		976C5B412F40F4FD00408F91 /* Build configuration list for PBXNativeTarget "VerifyShotAppXCODETests" */ = {
+		976C5C6C2F410E3F00408F91 /* Build configuration list for PBXNativeTarget "HACKNCSTATETests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				976C5B422F40F4FD00408F91 /* Debug */,
-				976C5B432F40F4FD00408F91 /* Release */,
+				976C5C6D2F410E3F00408F91 /* Debug */,
+				976C5C6E2F410E3F00408F91 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		976C5B442F40F4FD00408F91 /* Build configuration list for PBXNativeTarget "VerifyShotAppXCODEUITests" */ = {
+		976C5C6F2F410E3F00408F91 /* Build configuration list for PBXNativeTarget "HACKNCSTATEUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				976C5B452F40F4FD00408F91 /* Debug */,
-				976C5B462F40F4FD00408F91 /* Release */,
+				976C5C702F410E3F00408F91 /* Debug */,
+				976C5C712F410E3F00408F91 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 976C5B122F40F4FB00408F91 /* Project object */;
+	rootObject = 976C5C3D2F410E3D00408F91 /* Project object */;
 }

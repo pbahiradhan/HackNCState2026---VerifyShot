@@ -2,8 +2,9 @@
 // Shows which env vars are set (without revealing values)
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { BackboardClient } from "backboard-sdk";
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   const envCheck = {
@@ -24,10 +25,31 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   if (!envCheck.GOOGLE_SEARCH_API_KEY) missingOptional.push("GOOGLE_SEARCH_API_KEY");
   if (!envCheck.GOOGLE_SEARCH_ENGINE_ID) missingOptional.push("GOOGLE_SEARCH_ENGINE_ID");
 
+  // Test Backboard client initialization if key is set
+  let backboardTest: { status: string; error?: string } | null = null;
+  if (envCheck.BACKBOARD_API_KEY) {
+    try {
+      const key = process.env.BACKBOARD_API_KEY!;
+      if (key.length < 10) {
+        backboardTest = { status: "invalid", error: "API key appears too short" };
+      } else {
+        // Just test client creation, don't make API calls
+        new BackboardClient({ apiKey: key });
+        backboardTest = { status: "client_initialized" };
+      }
+    } catch (err: any) {
+      backboardTest = {
+        status: "failed",
+        error: err.message || "Unknown error",
+      };
+    }
+  }
+
   return res.status(200).json({
     status: allRequired ? "ready" : "misconfigured",
     timestamp: new Date().toISOString(),
     envVars: envCheck,
+    backboardTest,
     missingRequired: missingRequired.length > 0 ? missingRequired : undefined,
     missingOptional: missingOptional.length > 0 ? missingOptional : undefined,
     message: allRequired

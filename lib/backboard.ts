@@ -11,8 +11,17 @@ let _client: any | null = null;
 function bb(): any {
   if (!_client) {
     const key = process.env.BACKBOARD_API_KEY;
-    if (!key) throw new Error("BACKBOARD_API_KEY not set");
-    _client = new BackboardClient({ apiKey: key });
+    if (!key) {
+      throw new Error("BACKBOARD_API_KEY not set in environment variables");
+    }
+    if (key.length < 10) {
+      throw new Error("BACKBOARD_API_KEY appears invalid (too short)");
+    }
+    try {
+      _client = new BackboardClient({ apiKey: key });
+    } catch (err: any) {
+      throw new Error(`Failed to initialize Backboard client: ${err.message}`);
+    }
   }
   return _client;
 }
@@ -206,10 +215,11 @@ export async function chatAboutJob(
   userMessage: string,
   mode: string = "standard"
 ): Promise<string> {
-  const hasContext = contextText && contextText.length > 10;
+  try {
+    const hasContext = contextText && contextText.length > 10;
 
-  const standardPrompt = hasContext
-    ? `You are a focused research assistant helping users verify information from screenshots.
+    const standardPrompt = hasContext
+      ? `You are a focused research assistant helping users verify information from screenshots.
 
 Context from screenshot analysis:
 ${contextText}
@@ -219,15 +229,15 @@ Guidelines:
 - Reference specific sources when available
 - If uncertain, say "unverified" and suggest how to confirm
 - Be concise and helpful`
-    : `You are a helpful fact-checking assistant. Users ask you to verify claims or answer questions.
+      : `You are a helpful fact-checking assistant. Users ask you to verify claims or answer questions.
 
 Guidelines:
 - Provide clear, factual answers
 - If uncertain, say "unverified" and suggest how to confirm
 - Be concise`;
 
-  const deepResearchPrompt = hasContext
-    ? `You are an expert research analyst conducting deep research on a screenshot's claims.
+    const deepResearchPrompt = hasContext
+      ? `You are an expert research analyst conducting deep research on a screenshot's claims.
 
 Context from screenshot analysis:
 ${contextText}
@@ -241,7 +251,7 @@ Provide a thorough, structured analysis with these sections:
 6. **Recommendations** — What the user should know or do
 
 Be detailed and thorough. Use markdown formatting.`
-    : `You are an expert research analyst. Users want thorough investigations of topics or claims.
+      : `You are an expert research analyst. Users want thorough investigations of topics or claims.
 
 Provide a detailed, structured analysis with these sections:
 1. **Key Findings** — What the evidence shows
@@ -253,66 +263,94 @@ Provide a detailed, structured analysis with these sections:
 
 Be thorough and analytical. Use markdown formatting.`;
 
-  const systemPrompt = mode === "deep_research" ? deepResearchPrompt : standardPrompt;
-  const assistantName = mode === "deep_research" ? "VerifyShot-DeepResearch-v2" : "VerifyShot-Chat-v2";
+    const systemPrompt = mode === "deep_research" ? deepResearchPrompt : standardPrompt;
+    const assistantName = mode === "deep_research" ? "VerifyShot-DeepResearch-v2" : "VerifyShot-Chat-v2";
 
-  // Deep research gets web search tool for richer responses
-  const tools = mode === "deep_research" ? [getWebSearchTool()] : undefined;
-  const id = await getOrCreateAssistant(assistantName, systemPrompt, tools);
+    // Deep research gets web search tool for richer responses
+    const tools = mode === "deep_research" ? [getWebSearchTool()] : undefined;
+    
+    console.log(`[Backboard] Creating/getting assistant "${assistantName}"…`);
+    let id: string;
+    try {
+      id = await getOrCreateAssistant(assistantName, systemPrompt, tools);
+    } catch (err: any) {
+      console.error(`[Backboard] Assistant creation failed:`, err);
+      throw new Error(`Failed to create Backboard assistant: ${err.message}. Check BACKBOARD_API_KEY.`);
+    }
 
-  const threadKey = `${jobId}-${mode}`;
-  let threadId = chatThreads[threadKey];
-  if (!threadId) {
-    const thread = await bb().createThread(id);
-    threadId = thread.threadId;
-    chatThreads[threadKey] = threadId;
-  }
+    const threadKey = `${jobId}-${mode}`;
+    let threadId = chatThreads[threadKey];
+    if (!threadId) {
+      console.log(`[Backboard] Creating new thread for ${threadKey}…`);
+      try {
+        const thread = await bb().createThread(id);
+        threadId = thread.threadId;
+        chatThreads[threadKey] = threadId;
+      } catch (err: any) {
+        console.error(`[Backboard] Thread creation failed:`, err);
+        throw new Error(`Failed to create Backboard thread: ${err.message}`);
+      }
+    }
 
-  console.log(`[Backboard] Chat (${mode}): sending message…`);
-  const resp = await bb().addMessage({
-    threadId,
-    content: userMessage,
-    stream: false,
-    memory: "Auto",
-  });
+    console.log(`[Backboard] Chat (${mode}): sending message…`);
+    let resp: any;
+    try {
+      resp = await bb().addMessage({
+        threadId,
+        content: userMessage,
+        stream: false,
+        memory: "Auto",
+      });
+    } catch (err: any) {
+      console.error(`[Backboard] addMessage failed:`, err);
+      throw new Error(`Backboard API error: ${err.message}. Check your API key and credits.`);
+    }
 
-  // Handle tool calls (web search for deep research)
-  if (resp.status === "REQUIRES_ACTION" && resp.toolCalls) {
-    console.log(`[Backboard] Handling ${resp.toolCalls.length} tool call(s)…`);
-    const toolOutputs = [];
-    for (const tc of resp.toolCalls) {
-      if (tc.function.name === "web_search") {
+    // Handle tool calls (web search for deep research)
+    if (resp.status === "REQUIRES_ACTION" && resp.toolCalls) {
+      console.log(`[Backboard] Handling ${resp.toolCalls.length} tool call(s)…`);
+      const toolOutputs = [];
+      for (const tc of resp.toolCalls) {
+        if (tc.function.name === "web_search") {
+          try {
+            const args = tc.function.parsedArguments || JSON.parse(tc.function.arguments || "{}");
+            const sources = await searchSources(args.query, args.limit || 5);
+            toolOutputs.push({
+              toolCallId: tc.id,
+              output: JSON.stringify(sources),
+            });
+          } catch (e: any) {
+            console.error("[Backboard] Web search tool error:", e.message);
+            toolOutputs.push({
+              toolCallId: tc.id,
+              output: JSON.stringify({ error: "Search unavailable", results: [] }),
+            });
+          }
+        }
+      }
+
+      if (toolOutputs.length > 0) {
         try {
-          const args = tc.function.parsedArguments || JSON.parse(tc.function.arguments || "{}");
-          const sources = await searchSources(args.query, args.limit || 5);
-          toolOutputs.push({
-            toolCallId: tc.id,
-            output: JSON.stringify(sources),
+          const finalResp = await bb().submitToolOutputs({
+            threadId,
+            runId: resp.runId,
+            toolOutputs,
           });
+          return finalResp.content || "Analysis complete but no text was returned.";
         } catch (e: any) {
-          console.error("[Backboard] Web search tool error:", e.message);
-          toolOutputs.push({
-            toolCallId: tc.id,
-            output: JSON.stringify({ error: "Search unavailable", results: [] }),
-          });
+          console.error("[Backboard] Tool output submission failed:", e.message);
+          // Fall through to return whatever content we have
         }
       }
     }
 
-    if (toolOutputs.length > 0) {
-      try {
-        const finalResp = await bb().submitToolOutputs({
-          threadId,
-          runId: resp.runId,
-          toolOutputs,
-        });
-        return finalResp.content || "Analysis complete but no text was returned.";
-      } catch (e: any) {
-        console.error("[Backboard] Tool output submission failed:", e.message);
-        // Fall through to return whatever content we have
-      }
+    if (!resp.content) {
+      throw new Error("Backboard returned empty response. Check API key and credits.");
     }
-  }
 
-  return resp.content || "I couldn't generate a response. Please try again.";
+    return resp.content;
+  } catch (err: any) {
+    console.error("[Backboard] chatAboutJob error:", err.message);
+    throw err; // Re-throw so the API endpoint can catch it
+  }
 }
