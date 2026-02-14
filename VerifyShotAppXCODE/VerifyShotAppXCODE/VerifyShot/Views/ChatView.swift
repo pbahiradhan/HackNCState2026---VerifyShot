@@ -1,11 +1,15 @@
 import SwiftUI
 
-// MARK: - AI Chat View
+// MARK: - AI Chat View (works with or without screenshot context)
 
 struct ChatView: View {
     @EnvironmentObject var appState: AppState
     @State private var inputText = ""
     @FocusState private var isInputFocused: Bool
+
+    private var hasAnalysisContext: Bool {
+        appState.analysisResult != nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -14,12 +18,12 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 16) {
-                            // Context header
+                            // Context header (only when screenshot analyzed)
                             if let result = appState.analysisResult {
                                 contextBanner(result)
                             }
 
-                            // Welcome message
+                            // Welcome message (only if no messages yet)
                             if appState.chatMessages.isEmpty {
                                 welcomeMessage
                             }
@@ -48,11 +52,11 @@ struct ChatView: View {
 
                 Divider()
 
-                // Input bar
+                // Input bar (ChatGPT-style: text field + arrow up)
                 inputBar
             }
             .background(Color.vsBackground)
-            .navigationTitle("Ask AI")
+            .navigationTitle(hasAnalysisContext ? "Ask AI" : "Verify")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -93,19 +97,35 @@ struct ChatView: View {
             Image(systemName: "sparkles")
                 .font(.largeTitle)
                 .foregroundColor(.vsOrange)
-            Text("Ask me about this screenshot")
-                .font(.headline)
-                .foregroundColor(.vsNavy)
-            Text("I'll reference the sources we found to help you verify the claims.")
-                .font(.subheadline)
-                .foregroundColor(.vsDarkGray)
-                .multilineTextAlignment(.center)
 
-            // Quick question chips
-            VStack(spacing: 8) {
-                quickChip("Is this claim true?")
-                quickChip("What are the main sources?")
-                quickChip("Is there any bias?")
+            if hasAnalysisContext {
+                Text("Ask me about this screenshot")
+                    .font(.headline)
+                    .foregroundColor(.vsNavy)
+                Text("I'll reference the sources we found to help you verify the claims.")
+                    .font(.subheadline)
+                    .foregroundColor(.vsDarkGray)
+                    .multilineTextAlignment(.center)
+
+                VStack(spacing: 8) {
+                    quickChip("Is this claim true?")
+                    quickChip("What are the main sources?")
+                    quickChip("Is there any bias?")
+                }
+            } else {
+                Text("What would you like to verify?")
+                    .font(.headline)
+                    .foregroundColor(.vsNavy)
+                Text("Ask me to fact-check any claim, news, or statement.")
+                    .font(.subheadline)
+                    .foregroundColor(.vsDarkGray)
+                    .multilineTextAlignment(.center)
+
+                VStack(spacing: 8) {
+                    quickChip("Is climate change accelerating?")
+                    quickChip("Did the latest jobs report beat expectations?")
+                    quickChip("Is this health claim backed by science?")
+                }
             }
         }
         .padding(.vertical, 20)
@@ -171,7 +191,7 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Input bar
+    // MARK: - Input bar (ChatGPT style: text field + arrow up send)
 
     private var inputBar: some View {
         HStack(spacing: 12) {
@@ -185,18 +205,22 @@ struct ChatView: View {
                 sendMessage()
             } label: {
                 Circle()
-                    .fill(inputText.isEmpty ? Color.vsGray : Color.vsNavy)
+                    .fill(canSendChat ? Color.vsNavy : Color.vsGray)
                     .frame(width: 36, height: 36)
                     .overlay(
                         Image(systemName: "arrow.up")
                             .font(.body.bold())
-                            .foregroundColor(inputText.isEmpty ? .vsDarkGray : .white)
+                            .foregroundColor(canSendChat ? .white : .vsDarkGray)
                     )
             }
-            .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty || appState.isChatting)
+            .disabled(!canSendChat)
         }
         .padding(12)
         .background(Color.white)
+    }
+
+    private var canSendChat: Bool {
+        !inputText.trimmingCharacters(in: .whitespaces).isEmpty && !appState.isChatting
     }
 
     private func sendMessage() {

@@ -146,7 +146,8 @@ struct AnalysisResultView: View {
     private var actionButtons: some View {
         HStack(spacing: 16) {
             Button {
-                appState.showChat = true
+                // Navigate to home tab with chat context
+                appState.enterChatFromResults()
             } label: {
                 HStack {
                     Image(systemName: "bubble.left.and.bubble.right.fill")
@@ -161,10 +162,12 @@ struct AnalysisResultView: View {
             }
 
             Button {
-                appState.showDeepResearch = true
+                // Deep research with context → go to home in deep research mode
+                appState.isDeepResearchMode = true
+                appState.enterChatFromResults()
             } label: {
                 HStack {
-                    Image(systemName: "doc.text.magnifyingglass")
+                    Image(systemName: "sparkle.magnifyingglass")
                     Text("Deep Research")
                 }
                 .font(.headline)

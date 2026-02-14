@@ -257,18 +257,52 @@ const chatThreads: Record<string, string> = {}; // jobId → threadId
 export async function chatAboutJob(
   jobId: string,
   contextText: string,
-  userMessage: string
+  userMessage: string,
+  mode: string = "standard"
 ): Promise<string> {
+  const hasContext = contextText && contextText.length > 10;
+
+  const standardPrompt = hasContext
+    ? `You are a focused research assistant. The user has a screenshot with these details:\n${contextText}\nOnly answer about this topic. Reference specific sources. If uncertain, say "unverified" and suggest how to confirm.`
+    : `You are a helpful fact-checking assistant. The user is asking you to verify claims or answer questions. Provide clear, factual answers. If uncertain, say "unverified" and suggest how to confirm. Be concise.`;
+
+  const deepResearchPrompt = hasContext
+    ? `You are an expert research analyst doing deep research. The user has a screenshot with these details:\n${contextText}\n
+Provide a thorough, structured analysis:
+1. **Key Findings** — What the evidence shows
+2. **Source Analysis** — Quality and reliability of available sources
+3. **Multiple Perspectives** — Different viewpoints on this topic
+4. **Bias Assessment** — Any detected bias in the original content
+5. **Confidence Level** — How confident are we in the conclusions
+6. **Recommendations** — What the user should know or do
+
+Be detailed and thorough. Reference specific sources. Use markdown formatting.`
+    : `You are an expert research analyst. The user wants a thorough investigation of a topic or claim.
+
+Provide a detailed, structured analysis:
+1. **Key Findings** — What the evidence shows
+2. **Source Analysis** — Quality and reliability of available information
+3. **Multiple Perspectives** — Different viewpoints
+4. **Bias Assessment** — Potential biases to be aware of
+5. **Confidence Level** — How confident are we
+6. **Recommendations** — Key takeaways
+
+Be thorough and analytical. Use markdown formatting.`;
+
+  const systemPrompt = mode === "deep_research" ? deepResearchPrompt : standardPrompt;
+  const assistantName = mode === "deep_research" ? "VerifyShot-DeepResearch" : "VerifyShot-Chat";
+
   const id = await getOrCreateAssistant(
-    "VerifyShot-Chat",
-    `You are a focused research assistant. The user has a screenshot with these details:\n${contextText}\nOnly answer about this topic. Reference specific sources. If uncertain, say "unverified" and suggest how to confirm.`
+    assistantName,
+    systemPrompt,
+    mode === "deep_research" ? [getWebSearchTool()] : undefined
   );
 
-  let threadId = chatThreads[jobId];
+  let threadId = chatThreads[`${jobId}-${mode}`];
   if (!threadId) {
     const thread = await bb().createThread(id);
     threadId = thread.threadId;
-    chatThreads[jobId] = threadId;
+    chatThreads[`${jobId}-${mode}`] = threadId;
   }
 
   const resp = await bb().addMessage({
@@ -277,6 +311,30 @@ export async function chatAboutJob(
     stream: false,
     memory: "Auto",
   });
+
+  // Handle tool calls for deep research (web search)
+  if (resp.status === "REQUIRES_ACTION" && resp.toolCalls) {
+    const toolOutputs = [];
+    for (const tc of resp.toolCalls) {
+      if (tc.function.name === "web_search") {
+        const args = tc.function.parsedArguments || JSON.parse(tc.function.arguments || "{}");
+        const sources = await searchSources(args.query, args.limit || 5);
+        toolOutputs.push({
+          toolCallId: tc.id,
+          output: JSON.stringify(sources),
+        });
+      }
+    }
+
+    if (toolOutputs.length > 0) {
+      const finalResp = await bb().submitToolOutputs({
+        threadId,
+        runId: resp.runId,
+        toolOutputs,
+      });
+      return finalResp.content;
+    }
+  }
 
   return resp.content;
 }

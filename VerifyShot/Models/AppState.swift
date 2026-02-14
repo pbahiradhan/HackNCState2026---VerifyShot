@@ -15,13 +15,13 @@ final class AppState: ObservableObject {
     @Published var analysisError: String?
     @Published var progressText: String = ""
 
-    // Chat
+    // Chat (inline on home screen)
     @Published var chatMessages: [ChatMessage] = []
     @Published var isChatting = false
+    @Published var isDeepResearchMode = false
 
     // Navigation
     @Published var showAnalysis = false
-    @Published var showChat = false
     @Published var showDeepResearch = false
 
     // Selected tab
@@ -54,7 +54,6 @@ final class AppState: ObservableObject {
                 self.isAnalyzing = false
                 self.showAnalysis = true
                 self.selectedTab = .results
-                // Add to history
                 self.history.insert(result, at: 0)
             } catch {
                 self.analysisError = error.localizedDescription
@@ -63,28 +62,24 @@ final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Text Query (no screenshot, direct chat)
+    // MARK: - Text Query (inline chat — no sheet)
 
     func startTextQuery(_ text: String) {
-        // Reset previous chat
-        chatMessages = []
-
-        // Add user message immediately
+        // Add user message
         let userMsg = ChatMessage(role: .user, content: text)
         chatMessages.append(userMsg)
-
-        // Show chat
-        showChat = true
         isChatting = true
 
-        // Build context if an analysis already exists
+        let mode = isDeepResearchMode ? "deep_research" : "standard"
+
+        // Build context if analysis exists
         let context: String
         if let result = analysisResult {
             context = result.claims.map { claim in
                 "Claim: \(claim.text)\nVerdict: \(claim.verdict)\nSources: \(claim.sources.map(\.title).joined(separator: ", "))"
             }.joined(separator: "\n\n")
         } else {
-            context = "No screenshot context. The user is asking a fact-checking question directly."
+            context = ""
         }
 
         Task {
@@ -92,33 +87,38 @@ final class AppState: ObservableObject {
                 let reply = try await api.chat(
                     jobId: analysisResult?.jobId ?? "",
                     message: text,
-                    context: context
+                    context: context,
+                    mode: mode
                 )
                 let assistantMsg = ChatMessage(role: .assistant, content: reply)
                 self.chatMessages.append(assistantMsg)
             } catch {
-                let errMsg = ChatMessage(role: .assistant, content: "Sorry, something went wrong. Please try again.")
+                let errMsg = ChatMessage(
+                    role: .assistant,
+                    content: "Sorry, something went wrong: \(error.localizedDescription)"
+                )
                 self.chatMessages.append(errMsg)
             }
             self.isChatting = false
         }
     }
 
-    // MARK: - Chat
+    // MARK: - Continue Chat (send follow-up messages)
 
     func sendChatMessage(_ text: String) {
         let userMsg = ChatMessage(role: .user, content: text)
         chatMessages.append(userMsg)
         isChatting = true
 
-        // Build context from claims + sources
+        let mode = isDeepResearchMode ? "deep_research" : "standard"
+
         let context: String
         if let result = analysisResult {
             context = result.claims.map { claim in
                 "Claim: \(claim.text)\nVerdict: \(claim.verdict)\nSources: \(claim.sources.map(\.title).joined(separator: ", "))"
             }.joined(separator: "\n\n")
         } else {
-            context = "No screenshot context."
+            context = ""
         }
 
         Task {
@@ -126,16 +126,40 @@ final class AppState: ObservableObject {
                 let reply = try await api.chat(
                     jobId: analysisResult?.jobId ?? "",
                     message: text,
-                    context: context
+                    context: context,
+                    mode: mode
                 )
                 let assistantMsg = ChatMessage(role: .assistant, content: reply)
                 self.chatMessages.append(assistantMsg)
             } catch {
-                let errMsg = ChatMessage(role: .assistant, content: "Sorry, something went wrong. Please try again.")
+                let errMsg = ChatMessage(
+                    role: .assistant,
+                    content: "Sorry, something went wrong. Please try again."
+                )
                 self.chatMessages.append(errMsg)
             }
             self.isChatting = false
         }
+    }
+
+    // MARK: - Enter Chat from Analysis Results
+
+    func enterChatFromResults() {
+        guard let result = analysisResult else { return }
+        chatMessages = []
+        let welcomeMsg = ChatMessage(
+            role: .assistant,
+            content: "I have context from your screenshot analysis (\(result.aggregateTrustScore)% trust score, \(result.claims.count) claim\(result.claims.count == 1 ? "" : "s")). What would you like to know?"
+        )
+        chatMessages.append(welcomeMsg)
+        selectedTab = .home
+    }
+
+    // MARK: - Clear chat (back to home)
+
+    func clearChat() {
+        chatMessages = []
+        isDeepResearchMode = false
     }
 
     func resetForNewScreenshot() {
@@ -145,8 +169,8 @@ final class AppState: ObservableObject {
         analysisError = nil
         chatMessages = []
         showAnalysis = false
-        showChat = false
         showDeepResearch = false
         progressText = ""
+        isDeepResearchMode = false
     }
 }

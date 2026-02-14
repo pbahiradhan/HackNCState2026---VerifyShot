@@ -27,6 +27,9 @@ final class AppState: ObservableObject {
     // Selected tab
     @Published var selectedTab: Tab = .home
 
+    // History
+    @Published var history: [AnalysisResult] = []
+
     enum Tab: Int {
         case home = 0
         case results = 1
@@ -51,6 +54,8 @@ final class AppState: ObservableObject {
                 self.isAnalyzing = false
                 self.showAnalysis = true
                 self.selectedTab = .results
+                // Add to history
+                self.history.insert(result, at: 0)
             } catch {
                 self.analysisError = error.localizedDescription
                 self.isAnalyzing = false
@@ -58,24 +63,68 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Text Query (no screenshot, direct chat)
+
+    func startTextQuery(_ text: String) {
+        // Reset previous chat
+        chatMessages = []
+
+        // Add user message immediately
+        let userMsg = ChatMessage(role: .user, content: text)
+        chatMessages.append(userMsg)
+
+        // Show chat
+        showChat = true
+        isChatting = true
+
+        // Build context if an analysis already exists
+        let context: String
+        if let result = analysisResult {
+            context = result.claims.map { claim in
+                "Claim: \(claim.text)\nVerdict: \(claim.verdict)\nSources: \(claim.sources.map(\.title).joined(separator: ", "))"
+            }.joined(separator: "\n\n")
+        } else {
+            context = "No screenshot context. The user is asking a fact-checking question directly."
+        }
+
+        Task {
+            do {
+                let reply = try await api.chat(
+                    jobId: analysisResult?.jobId ?? "",
+                    message: text,
+                    context: context
+                )
+                let assistantMsg = ChatMessage(role: .assistant, content: reply)
+                self.chatMessages.append(assistantMsg)
+            } catch {
+                let errMsg = ChatMessage(role: .assistant, content: "Sorry, something went wrong. Please try again.")
+                self.chatMessages.append(errMsg)
+            }
+            self.isChatting = false
+        }
+    }
+
     // MARK: - Chat
 
     func sendChatMessage(_ text: String) {
-        guard let result = analysisResult else { return }
-
         let userMsg = ChatMessage(role: .user, content: text)
         chatMessages.append(userMsg)
         isChatting = true
 
         // Build context from claims + sources
-        let context = result.claims.map { claim in
-            "Claim: \(claim.text)\nVerdict: \(claim.verdict)\nSources: \(claim.sources.map(\.title).joined(separator: ", "))"
-        }.joined(separator: "\n\n")
+        let context: String
+        if let result = analysisResult {
+            context = result.claims.map { claim in
+                "Claim: \(claim.text)\nVerdict: \(claim.verdict)\nSources: \(claim.sources.map(\.title).joined(separator: ", "))"
+            }.joined(separator: "\n\n")
+        } else {
+            context = "No screenshot context."
+        }
 
         Task {
             do {
                 let reply = try await api.chat(
-                    jobId: result.jobId,
+                    jobId: analysisResult?.jobId ?? "",
                     message: text,
                     context: context
                 )

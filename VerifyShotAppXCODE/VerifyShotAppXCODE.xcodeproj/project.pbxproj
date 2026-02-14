@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		976C5B952F40F9B800408F91 /* Exceptions for "VerifyShotAppXCODE" folder in "VerifyShotAppXCODE" target */ = {
+		976C5BEF2F4103F300408F91 /* Exceptions for "VerifyShotAppXCODE" folder in "VerifyShotAppXCODE" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				VerifyShot/Info.plist,
@@ -43,7 +43,7 @@
 		976C5B1C2F40F4FB00408F91 /* VerifyShotAppXCODE */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				976C5B952F40F9B800408F91 /* Exceptions for "VerifyShotAppXCODE" folder in "VerifyShotAppXCODE" target */,
+				976C5BEF2F4103F300408F91 /* Exceptions for "VerifyShotAppXCODE" folder in "VerifyShotAppXCODE" target */,
 			);
 			path = VerifyShotAppXCODE;
 			sourceTree = "<group>";
