@@ -60,7 +60,14 @@ struct AnalysisResultView: View {
                     }
                 }
             }
-            // Sheets are managed centrally in MainTabView
+            .sheet(isPresented: $appState.showChat) {
+                ChatView()
+                    .environmentObject(appState)
+            }
+            .sheet(isPresented: $appState.showDeepResearch) {
+                DeepResearchView()
+                    .environmentObject(appState)
+            }
         )
     }
 

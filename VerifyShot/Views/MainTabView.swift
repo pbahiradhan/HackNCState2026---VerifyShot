@@ -31,6 +31,15 @@ struct MainTabView: View {
             CustomTabBar(selected: $appState.selectedTab)
         }
         .edgesIgnoringSafeArea(.bottom)
+        // Centralized sheets — accessible from any tab
+        .sheet(isPresented: $appState.showChat) {
+            ChatView()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $appState.showDeepResearch) {
+            DeepResearchView()
+                .environmentObject(appState)
+        }
     }
 }
 
@@ -47,7 +56,9 @@ struct CustomTabBar: View {
             Spacer()
 
             // Center search button
-            Button {} label: {
+            Button {
+                selected = .results
+            } label: {
                 ZStack {
                     Circle()
                         .fill(Color.vsNavy)
@@ -62,12 +73,8 @@ struct CustomTabBar: View {
 
             Spacer()
 
-            // Results / History
-            tabButton(
-                icon: selected == .results ? "chart.bar.fill" : "clock.fill",
-                label: selected == .results ? "Results" : "History",
-                tab: selected == .results ? .results : .history
-            )
+            // History
+            tabButton(icon: "clock.fill", label: "History", tab: .history)
             Spacer()
         }
         .padding(.horizontal, 20)
@@ -95,7 +102,7 @@ struct CustomTabBar: View {
     }
 }
 
-// MARK: - Placeholders
+// MARK: - Empty Results placeholder
 
 struct EmptyResultsView: View {
     var body: some View {
@@ -114,16 +121,107 @@ struct EmptyResultsView: View {
     }
 }
 
+// MARK: - History View (real data)
+
 struct HistoryView: View {
+    @EnvironmentObject var appState: AppState
+
     var body: some View {
+        Group {
+            if appState.history.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(appState.history) { result in
+                            HistoryRow(result: result)
+                                .onTapGesture {
+                                    appState.analysisResult = result
+                                    appState.selectedTab = .results
+                                }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 120) // room for tab bar
+                }
+            }
+        }
+        .background(Color.vsBackground)
+        .navigationTitle("History")
+    }
+
+    private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "clock")
                 .font(.system(size: 48))
                 .foregroundColor(.vsDarkGray)
-            Text("History coming soon")
+            Text("No history yet")
                 .font(.title3.weight(.medium))
                 .foregroundColor(.vsDarkGray)
+            Text("Your past analyses will appear here")
+                .font(.subheadline)
+                .foregroundColor(.gray)
         }
-        .navigationTitle("History")
+    }
+}
+
+// MARK: - History Row
+
+struct HistoryRow: View {
+    let result: AnalysisResult
+
+    private var formattedDate: String {
+        // Parse ISO date and show short format
+        let iso = result.generatedAt
+        if iso.count >= 10 {
+            return String(iso.prefix(10))
+        }
+        return iso
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            // Trust score circle
+            ZStack {
+                Circle()
+                    .fill(Color.forTrustScore(result.aggregateTrustScore).opacity(0.15))
+                    .frame(width: 52, height: 52)
+                Text("\(result.aggregateTrustScore)%")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(.forTrustScore(result.aggregateTrustScore))
+            }
+
+            // Claim text + metadata
+            VStack(alignment: .leading, spacing: 4) {
+                Text(result.claims.first?.text ?? result.summary.prefix(60) + "…")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.vsNavy)
+                    .lineLimit(2)
+
+                HStack(spacing: 8) {
+                    Text(result.trustLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.forTrustScore(result.aggregateTrustScore))
+
+                    Text("•")
+                        .foregroundColor(.vsDarkGray)
+
+                    Text(formattedDate)
+                        .font(.caption)
+                        .foregroundColor(.vsDarkGray)
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.vsDarkGray)
+        }
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
     }
 }

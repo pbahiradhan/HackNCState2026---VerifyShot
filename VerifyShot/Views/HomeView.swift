@@ -1,15 +1,16 @@
 import SwiftUI
 import PhotosUI
 
-// MARK: - Home Screen (Screenshot 1 from design)
+// MARK: - Home Screen (ChatGPT-inspired redesign)
 
 struct HomeView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var detector = ScreenshotDetector()
-    @State private var showPhotoPicker = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var searchText = ""
-    @State private var isAIMode = true
+    @State private var showAttachmentMenu = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showNoAnalysisAlert = false
+    @FocusState private var isSearchFocused: Bool
 
     private let suggestions = [
         "Verify COVID claim from recent news",
@@ -38,7 +39,6 @@ struct HomeView: View {
 
                 // Orange sun graphic
                 ZStack {
-                    // Glow
                     Circle()
                         .fill(
                             RadialGradient(
@@ -50,7 +50,6 @@ struct HomeView: View {
                         )
                         .frame(width: 300, height: 300)
 
-                    // Sun circle
                     Circle()
                         .fill(
                             LinearGradient(
@@ -78,6 +77,7 @@ struct HomeView: View {
                         ForEach(suggestions, id: \.self) { suggestion in
                             Button {
                                 searchText = suggestion
+                                isSearchFocused = true
                             } label: {
                                 Text(suggestion)
                                     .font(.subheadline)
@@ -91,19 +91,9 @@ struct HomeView: View {
                     }
                     .padding(.horizontal, 20)
                 }
-                .padding(.bottom, 12)
+                .padding(.bottom, 16)
 
-                // "Start searching" label
-                HStack {
-                    Text("Start searching")
-                        .font(.subheadline)
-                        .foregroundColor(.vsDarkGray)
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-
-                // Search bar (matches screenshot)
+                // Search bar (ChatGPT style)
                 searchBar
                     .padding(.horizontal, 16)
                     .padding(.bottom, 100) // room for tab bar
@@ -125,70 +115,180 @@ struct HomeView: View {
                 loadPhoto(from: item)
             }
         }
+        .sheet(isPresented: $showAttachmentMenu) {
+            attachmentMenu
+        }
+        .alert("No Analysis Yet", isPresented: $showNoAnalysisAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Analyze a screenshot first, then use Deep Research for a detailed report.")
+        }
     }
 
-    // MARK: - Search bar component
+    // MARK: - Search bar (ChatGPT style: [+] [Ask anything...] [↑])
 
     private var searchBar: some View {
-        HStack(spacing: 12) {
-            // Photo picker button
-            PhotosPicker(selection: $selectedPhotoItem, matching: .screenshots) {
-                Image(systemName: "photo.badge.plus")
-                    .font(.title3)
-                    .foregroundColor(.vsNavy)
-                    .frame(width: 40, height: 40)
-                    .background(Color.vsGray)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-
-            // Mode toggles
-            HStack(spacing: 0) {
-                modeButton("AI Mode", icon: "sparkles", active: isAIMode) {
-                    isAIMode = true
-                }
-                modeButton("Standard", icon: "magnifyingglass", active: !isAIMode) {
-                    isAIMode = false
-                }
-            }
-
-            Spacer()
-
-            // Send / analyze button
+        HStack(spacing: 10) {
+            // "+" button — opens attachment menu
             Button {
-                if let img = appState.screenshotImage {
-                    appState.analyzeScreenshot(img)
-                }
+                showAttachmentMenu = true
             } label: {
                 Circle()
                     .fill(Color.vsNavy)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 38, height: 38)
                     .overlay(
-                        Image(systemName: "arrow.up")
+                        Image(systemName: "plus")
                             .font(.body.bold())
                             .foregroundColor(.white)
                     )
             }
+
+            // Text input
+            TextField("Ask anything", text: $searchText)
+                .font(.body)
+                .foregroundColor(.vsNavy)
+                .focused($isSearchFocused)
+                .submitLabel(.send)
+                .onSubmit { sendTextQuery() }
+
+            // Send button
+            Button {
+                sendTextQuery()
+            } label: {
+                Circle()
+                    .fill(canSend ? Color.vsNavy : Color.vsGray)
+                    .frame(width: 38, height: 38)
+                    .overlay(
+                        Image(systemName: "arrow.up")
+                            .font(.body.bold())
+                            .foregroundColor(canSend ? .white : .vsDarkGray)
+                    )
+            }
+            .disabled(!canSend)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+        .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
     }
 
-    private func modeButton(_ label: String, icon: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.caption)
-                Text(label)
-                    .font(.subheadline.weight(.medium))
+    private var canSend: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    // MARK: - Attachment Menu Sheet (ChatGPT-style bottom sheet)
+
+    private var attachmentMenu: some View {
+        VStack(spacing: 0) {
+            // Top row: Photos
+            HStack(spacing: 16) {
+                // Photos picker
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                        Text("Photos")
+                            .font(.caption.weight(.medium))
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 90, height: 90)
+                    .background(Color(.systemGray3))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .onChange(of: selectedPhotoItem) { _, newItem in
+                    if newItem != nil {
+                        showAttachmentMenu = false
+                    }
+                }
+
+                // Screenshots shortcut
+                PhotosPicker(selection: $selectedPhotoItem, matching: .screenshots) {
+                    VStack(spacing: 8) {
+                        Image(systemName: "camera.viewfinder")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                        Text("Screenshots")
+                            .font(.caption.weight(.medium))
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 90, height: 90)
+                    .background(Color(.systemGray3))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(active ? Color.vsOrange.opacity(0.12) : Color.clear)
-            .foregroundColor(active ? .vsOrange : .gray)
-            .clipShape(Capsule())
+            .padding(.top, 28)
+            .padding(.bottom, 20)
+
+            Divider()
+                .padding(.horizontal, 20)
+
+            // List options
+            VStack(spacing: 0) {
+                // Deep Research
+                Button {
+                    showAttachmentMenu = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        if appState.analysisResult != nil {
+                            appState.showDeepResearch = true
+                        } else {
+                            showNoAnalysisAlert = true
+                        }
+                    }
+                } label: {
+                    menuRow(
+                        icon: "doc.text.magnifyingglass",
+                        iconColor: .vsOrange,
+                        title: "Deep Research",
+                        subtitle: "Get a detailed analysis report"
+                    )
+                }
+
+                // Web Search
+                Button {
+                    showAttachmentMenu = false
+                    isSearchFocused = true
+                } label: {
+                    menuRow(
+                        icon: "globe",
+                        iconColor: .vsBlue,
+                        title: "Web Search",
+                        subtitle: "Find real-time news and info"
+                    )
+                }
+            }
+
+            Spacer()
         }
+        .presentationDetents([.fraction(0.42)])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func menuRow(icon: String, iconColor: Color, title: String, subtitle: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(iconColor)
+                .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(.vsNavy)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.vsDarkGray)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.vsDarkGray)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
     }
 
     // MARK: - Loading Overlay
@@ -208,6 +308,16 @@ struct HomeView: View {
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 20))
         }
+    }
+
+    // MARK: - Send text query → opens chat
+
+    private func sendTextQuery() {
+        let text = searchText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        searchText = ""
+        isSearchFocused = false
+        appState.startTextQuery(text)
     }
 
     // MARK: - Load photo from picker
