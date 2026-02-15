@@ -17,13 +17,17 @@ export async function analyzeImage(
   console.log(`[Analyzer][${jobId}] Starting analysis…`);
 
   // ── Step 1: OCR via Gemini Vision (1 API call) ──
-  console.log(`[Analyzer][${jobId}] Step 1: OCR…`);
+  console.log(`[Analyzer][${jobId}] Step 1: OCR from ${imageUrl}…`);
   let ocrText: string;
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY not set in environment variables");
+    }
     ocrText = await extractTextFromImage(imageUrl);
   } catch (err: any) {
     console.error(`[Analyzer][${jobId}] OCR failed:`, err.message);
-    throw new Error(`OCR failed: ${err.message}`);
+    console.error(`[Analyzer][${jobId}] OCR error stack:`, err.stack);
+    throw new Error(`OCR failed: ${err.message}. Check GEMINI_API_KEY is set.`);
   }
 
   if (!ocrText.trim()) {
@@ -48,10 +52,14 @@ export async function analyzeImage(
   console.log(`[Analyzer][${jobId}] Step 3: Backboard analysis…`);
   let analysis;
   try {
+    if (!process.env.BACKBOARD_API_KEY) {
+      throw new Error("BACKBOARD_API_KEY not set in environment variables");
+    }
     analysis = await analyzeTextComprehensive(ocrText, sources);
   } catch (err: any) {
     console.error(`[Analyzer][${jobId}] Backboard analysis failed:`, err.message);
-    throw new Error(`Analysis failed: ${err.message}`);
+    console.error(`[Analyzer][${jobId}] Backboard error stack:`, err.stack);
+    throw new Error(`Analysis failed: ${err.message}. Check BACKBOARD_API_KEY is set and account has credits.`);
   }
 
   // ── Step 4: Build result ──
