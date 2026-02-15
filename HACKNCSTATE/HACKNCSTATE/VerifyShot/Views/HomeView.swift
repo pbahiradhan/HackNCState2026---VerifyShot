@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var pendingImage: UIImage?
     @State private var showScreenshotAlert = false
+    @State private var isCheckingLatestScreenshot = false
 
     var body: some View {
         ZStack {
@@ -22,10 +23,16 @@ struct HomeView: View {
                 // Main content
                 mainContent
 
-                // Upload button (always at bottom)
-                uploadButton
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 100)
+                // Action buttons (always at bottom)
+                VStack(spacing: 12) {
+                    // Check Latest Screenshot button
+                    checkLatestScreenshotButton
+                    
+                    // Upload button
+                    uploadButton
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 100)
             }
 
             // Loading overlay
@@ -111,14 +118,59 @@ struct HomeView: View {
             }
 
             // Greeting
-            Text("Upload a screenshot\nto verify claims")
-                .font(.system(size: 26, weight: .bold))
-                .multilineTextAlignment(.center)
-                .foregroundColor(.vsNavy)
-                .padding(.top, 24)
+            VStack(spacing: 8) {
+                Text("Upload a screenshot\nto verify claims")
+                    .font(.system(size: 26, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.vsNavy)
+                
+                Text("Or check your latest screenshot")
+                    .font(.subheadline)
+                    .foregroundColor(.vsDarkGray)
+            }
+            .padding(.top, 24)
 
             Spacer()
         }
+    }
+
+    // MARK: - Check Latest Screenshot Button
+
+    private var checkLatestScreenshotButton: some View {
+        Button {
+            isCheckingLatestScreenshot = true
+            Task {
+                await appState.analyzeLatestScreenshot()
+                isCheckingLatestScreenshot = false
+            }
+        } label: {
+            HStack(spacing: 12) {
+                if isCheckingLatestScreenshot {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .scaleEffect(0.8)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "camera.viewfinder")
+                        .font(.title3)
+                }
+                Text(isCheckingLatestScreenshot ? "Checking..." : "Check Latest Screenshot")
+                    .font(.headline)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                LinearGradient(
+                    colors: [Color.vsOrange, Color.vsOrange.opacity(0.8)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: .vsOrange.opacity(0.3), radius: 8, y: 4)
+        }
+        .disabled(isCheckingLatestScreenshot || appState.isAnalyzing)
     }
 
     // MARK: - Upload Button
@@ -140,6 +192,7 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
         }
+        .disabled(appState.isAnalyzing)
     }
 
     // MARK: - Attachment Menu
