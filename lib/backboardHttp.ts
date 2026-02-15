@@ -114,9 +114,13 @@ export async function analyzeTextComprehensive(
 
   const systemPrompt = `You are an expert fact-checker and media analyst. Analyze the provided screenshot text and web sources to produce a comprehensive fact-check report.
 
-CRITICAL: You MUST return ONLY valid JSON. No markdown, no code blocks, no explanations outside the JSON. Start with { and end with }.
+CRITICAL INSTRUCTIONS:
+1. You MUST return ONLY valid JSON - no markdown, no code blocks, no text before or after
+2. Start your response with { and end with }
+3. Use actual numbers for confidence (0.0-1.0), not defaults
+4. Base confidence on source evidence quality
 
-Required JSON structure (copy this exactly):
+Required JSON structure:
 {
   "claims": [
     {
@@ -215,11 +219,33 @@ Analyze this content and return the JSON response.`;
   }
 
   const resp = (await messageRes.json()) as any;
+  
+  // Log full response structure for debugging
+  console.log("[Backboard] Full API response keys:", Object.keys(resp));
+  console.log("[Backboard] Response status:", resp.status);
+  console.log("[Backboard] Response content type:", typeof resp.content);
+  console.log("[Backboard] Response content preview:", JSON.stringify(resp).slice(0, 500));
 
-  // Parse JSON from response
-  let content = resp.content?.trim() || "";
-  console.log("[Backboard] Raw response length:", content.length);
-  console.log("[Backboard] Raw response preview:", content.slice(0, 300));
+  // Backboard API might return content in different formats
+  // Try multiple possible fields
+  let content = "";
+  if (typeof resp.content === "string") {
+    content = resp.content.trim();
+  } else if (resp.message?.content) {
+    content = resp.message.content.trim();
+  } else if (resp.text) {
+    content = resp.text.trim();
+  } else if (Array.isArray(resp.messages) && resp.messages.length > 0) {
+    content = resp.messages[resp.messages.length - 1].content?.trim() || "";
+  } else {
+    // Try to stringify and extract
+    const respStr = JSON.stringify(resp);
+    console.error("[Backboard] Unexpected response structure:", respStr.slice(0, 1000));
+    throw new Error("Backboard response format not recognized. Check API response structure.");
+  }
+  
+  console.log("[Backboard] Extracted content length:", content.length);
+  console.log("[Backboard] Content preview:", content.slice(0, 500));
 
   // Strip markdown code fences if present
   if (content.startsWith("```")) {
@@ -237,17 +263,64 @@ Analyze this content and return the JSON response.`;
 
   try {
     const parsed = JSON.parse(content);
-    console.log("[Backboard] Parsed JSON successfully");
+    console.log("[Backboard] ✅ Parsed JSON successfully");
+    console.log("[Backboard] Parsed keys:", Object.keys(parsed));
     console.log("[Backboard] Claims count:", parsed.claims?.length || 0);
-    console.log("[Backboard] First claim confidence:", parsed.claims?.[0]?.confidence);
-    console.log("[Backboard] Summary length:", parsed.summary?.length || 0);
-    return {
-      claims: (parsed.claims || []).slice(0, 3).map((c: any) => ({
-        text: c.text || "Unknown claim",
+    
+    // Validate and log each claim
+    if (parsed.claims && parsed.claims.length > 0) {
+      parsed.claims.forEach((c: any, i: number) => {
+        console.log(`[Backboard] Claim ${i + 1}:`, {
+          text: c.text?.slice(0, 50) || "MISSING",
+          verdict: c.verdict || "MISSING",
+          confidence: c.confidence ?? "MISSING",
+          hasExplanation: !!c.explanation,
+        });
+      });
+    } else {
+      console.error("[Backboard] ⚠️ No claims found in parsed JSON!");
+    }
+    
+    console.log("[Backboard] Summary:", parsed.summary?.slice(0, 100) || "MISSING");
+    console.log("[Backboard] Bias assessment:", parsed.biasAssessment ? "Present" : "MISSING");
+    console.log("[Backboard] Model consensus:", parsed.modelConsensus?.length || 0);
+    
+    // Validate confidence values - they should NOT be 0.5 (default)
+    const claims = (parsed.claims || []).slice(0, 3).map((c: any, idx: number) => {
+      // Handle different confidence formats
+      let conf: number;
+      if (typeof c.confidence === "number") {
+        conf = c.confidence;
+      } else if (typeof c.confidence === "string") {
+        conf = parseFloat(c.confidence) || 0.5;
+      } else {
+        conf = 0.5;
+      }
+      
+      // Warn if using default
+      if (conf === 0.5) {
+        console.warn(`[Backboard] ⚠️ Claim ${idx + 1} has default confidence 0.5`);
+        console.warn(`[Backboard] Claim data:`, JSON.stringify(c).slice(0, 200));
+      } else {
+        console.log(`[Backboard] ✅ Claim ${idx + 1} confidence: ${conf}`);
+      }
+      
+      return {
+        text: c.text || `Claim ${idx + 1}`,
         verdict: c.verdict || "mixed",
-        confidence: Math.max(0, Math.min(1, c.confidence || 0.5)),
+        confidence: Math.max(0, Math.min(1, conf)),
         explanation: c.explanation || "Analysis pending.",
-      })),
+      };
+    });
+    
+    // Validate we got at least one claim
+    if (claims.length === 0) {
+      console.error("[Backboard] ❌ No claims extracted from response!");
+      throw new Error("Backboard returned no claims. Check the prompt and response format.");
+    }
+    
+    return {
+      claims,
       biasAssessment: {
         politicalBias: parsed.biasAssessment?.politicalBias ?? 0,
         sensationalism: parsed.biasAssessment?.sensationalism ?? 0.3,

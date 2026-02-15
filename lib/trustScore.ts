@@ -38,8 +38,23 @@ export function calculateTrustScore(
   const finalScore = Math.max(0, Math.min(100, Math.round(raw * 100)));
   
   // Log calculation for debugging
+  console.log(`[TrustScore] Calculation:`, {
+    sourceQuality: sourceQuality.toFixed(2),
+    modelConsensus: modelConsensus.toFixed(2),
+    recency: recency.toFixed(2),
+    agreement: agreement.toFixed(2),
+    biasPenalty: biasPenalty.toFixed(2),
+    raw: raw.toFixed(2),
+    finalScore,
+    sourceCount: sources.length,
+  });
+  
   if (sources.length === 0) {
-    console.log(`[TrustScore] No sources - using model consensus: ${modelConsensus}, final: ${finalScore}`);
+    console.log(`[TrustScore] ⚠️ No sources - relying heavily on model consensus: ${modelConsensus.toFixed(2)}`);
+  }
+  
+  if (modelConsensus === 0.5) {
+    console.warn(`[TrustScore] ⚠️ Model consensus is default 0.5 - Backboard may not have returned proper confidence`);
   }
   
   return finalScore;
