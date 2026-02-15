@@ -112,38 +112,60 @@ export async function analyzeTextComprehensive(
     ? sources.map((s, i) => `[${i + 1}] ${s.title} (${s.domain}, ${s.date}): ${s.snippet}`).join("\n")
     : "No web sources available.";
 
-  const systemPrompt = `You are an expert fact-checker and media analyst. When given text from a screenshot and web sources, perform a COMPLETE analysis.
+  const systemPrompt = `You are an expert fact-checker and media analyst. Analyze the provided screenshot text and web sources to produce a comprehensive fact-check report.
 
-You MUST return ONLY valid JSON (no markdown, no backticks, no explanation outside the JSON) with this exact structure:
+CRITICAL: You MUST return ONLY valid JSON. No markdown, no code blocks, no explanations outside the JSON. Start with { and end with }.
+
+Required JSON structure (copy this exactly):
 {
   "claims": [
     {
-      "text": "The specific factual claim extracted",
-      "verdict": "likely_true" or "mixed" or "likely_misleading",
-      "confidence": 0.0 to 1.0,
-      "explanation": "Brief explanation based on sources"
+      "text": "The exact factual claim extracted from the screenshot text",
+      "verdict": "likely_true",
+      "confidence": 0.85,
+      "explanation": "2-3 sentence explanation citing specific sources"
     }
   ],
   "biasAssessment": {
-    "politicalBias": -1.0 to 1.0 (negative = left, positive = right),
-    "sensationalism": 0.0 to 1.0,
-    "overallBias": "left" or "slight_left" or "center" or "slight_right" or "right",
-    "explanation": "Brief explanation of detected bias"
+    "politicalBias": 0.2,
+    "sensationalism": 0.3,
+    "overallBias": "slight_right",
+    "explanation": "Brief explanation of detected bias patterns"
   },
-  "summary": "2-3 sentence summary of the fact-check findings",
+  "summary": "2-3 sentence summary of the overall fact-check findings",
   "modelConsensus": [
-    {"modelName": "GPT-4", "agrees": true/false, "confidence": 0.0-1.0},
-    {"modelName": "Claude 3", "agrees": true/false, "confidence": 0.0-1.0},
-    {"modelName": "Gemini", "agrees": true/false, "confidence": 0.0-1.0}
+    {"modelName": "GPT-4", "agrees": true, "confidence": 0.8},
+    {"modelName": "Claude 3", "agrees": true, "confidence": 0.75},
+    {"modelName": "Gemini", "agrees": false, "confidence": 0.4}
   ]
 }
 
-Rules:
-- Extract 1-3 verifiable factual claims (not opinions)
-- Each claim verdict is based on source evidence
-- Bias assessment covers the ORIGINAL text's framing
-- Model consensus simulates how different AI models would judge the main claim
-- Be honest about uncertainty`;
+VERDICT RULES:
+- "likely_true": Claim is supported by credible sources (confidence 0.7-1.0)
+- "mixed": Evidence is conflicting or insufficient (confidence 0.4-0.7)
+- "likely_misleading": Claim contradicts credible sources or lacks evidence (confidence 0.0-0.4)
+
+CONFIDENCE RULES:
+- 0.8-1.0: Strong evidence from multiple credible sources
+- 0.6-0.8: Good evidence from credible sources
+- 0.4-0.6: Mixed or limited evidence
+- 0.0-0.4: Weak or contradictory evidence
+
+BIAS RULES:
+- politicalBias: -1.0 (strong left) to 1.0 (strong right), 0 = neutral
+- sensationalism: 0.0 (factual) to 1.0 (highly sensational)
+- overallBias: "left", "slight_left", "center", "slight_right", "right"
+
+MODEL CONSENSUS RULES:
+- "agrees": true if the model would support the main claim, false if it would dispute it
+- "confidence": How confident that model would be (0.0-1.0)
+
+IMPORTANT:
+1. Extract 1-3 specific, verifiable factual claims (not opinions or general statements)
+2. Base verdicts on the provided web sources - cite them in explanations
+3. If no sources provided, use "mixed" verdict with lower confidence
+4. Be honest about uncertainty - don't overstate confidence
+5. Return ONLY the JSON object, nothing else`;
 
   const assistantId = await getOrCreateAssistant("VerifyShot-Analyzer-v2", systemPrompt);
 
@@ -197,6 +219,7 @@ Analyze this content and return the JSON response.`;
   // Parse JSON from response
   let content = resp.content?.trim() || "";
   console.log("[Backboard] Raw response length:", content.length);
+  console.log("[Backboard] Raw response preview:", content.slice(0, 300));
 
   // Strip markdown code fences if present
   if (content.startsWith("```")) {
@@ -205,10 +228,19 @@ Analyze this content and return the JSON response.`;
 
   // Try to find JSON object
   const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (jsonMatch) content = jsonMatch[0];
+  if (jsonMatch) {
+    content = jsonMatch[0];
+  } else {
+    console.error("[Backboard] No JSON object found in response!");
+    console.error("[Backboard] Full content:", content);
+  }
 
   try {
     const parsed = JSON.parse(content);
+    console.log("[Backboard] Parsed JSON successfully");
+    console.log("[Backboard] Claims count:", parsed.claims?.length || 0);
+    console.log("[Backboard] First claim confidence:", parsed.claims?.[0]?.confidence);
+    console.log("[Backboard] Summary length:", parsed.summary?.length || 0);
     return {
       claims: (parsed.claims || []).slice(0, 3).map((c: any) => ({
         text: c.text || "Unknown claim",

@@ -73,9 +73,21 @@ export async function analyzeImage(
 
   // ── Step 4: Build result ──
   console.log(`[Analyzer][${jobId}] Step 4: Building result…`);
+  console.log(`[Analyzer][${jobId}] Analysis claims:`, analysis.claims.length);
+  console.log(`[Analyzer][${jobId}] Sources found:`, sources.length);
+  
   const claims: Claim[] = analysis.claims.map((c, i) => {
     const bp = biasPenalty(analysis.biasAssessment);
     const score = calculateTrustScore(sources, c.confidence, bp);
+    
+    console.log(`[Analyzer][${jobId}] Claim ${i + 1}:`, {
+      text: c.text.slice(0, 50) + "...",
+      verdict: c.verdict,
+      confidence: c.confidence,
+      calculatedScore: score,
+      sourceCount: sources.length,
+      biasPenalty: bp,
+    });
 
     return {
       id: `c${i + 1}`,
@@ -89,10 +101,13 @@ export async function analyzeImage(
     };
   });
 
-  // Aggregate trust score
+  // Aggregate trust score - use the main claim's score if only one, otherwise average
   const aggScore = claims.length > 0
     ? Math.round(claims.reduce((s, c) => s + c.trustScore, 0) / claims.length)
     : 0;
+  
+  console.log(`[Analyzer][${jobId}] Aggregate trust score: ${aggScore}%`);
+  console.log(`[Analyzer][${jobId}] Trust label: ${trustLabel(aggScore)}`);
 
   const result: AnalysisResult = {
     jobId,

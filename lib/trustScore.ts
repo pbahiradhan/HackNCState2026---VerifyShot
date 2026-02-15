@@ -11,25 +11,38 @@ export function calculateTrustScore(
 ): number {
   // 1. Source quality (0-1) — weighted avg credibility
   const sourceQuality = sources.length > 0
-    ? sources.reduce((s, src) => s + src.credibilityScore, 0) / sources.length
-    : 0;
+    ? sources.reduce((s, src) => s + (src.credibilityScore || 0.5), 0) / sources.length
+    : 0.3; // Default to 0.3 if no sources (neutral baseline)
 
   // 2. Recency (0-1) — how recent corroborating sources are
   const recency = calculateRecencyScore(sources);
 
   // 3. Independent agreement (0-1) — fraction of high-quality sources
-  const highQ = sources.filter((s) => s.credibilityScore >= 0.7).length;
-  const agreement = sources.length > 0 ? highQ / sources.length : 0;
+  const highQ = sources.filter((s) => (s.credibilityScore || 0) >= 0.7).length;
+  const agreement = sources.length > 0 ? highQ / sources.length : 0.3; // Default if no sources
 
   // Weighted formula
+  // If no sources, rely more heavily on model consensus
+  const sourceWeight = sources.length > 0 ? 0.45 : 0.20;
+  const modelWeight = sources.length > 0 ? 0.30 : 0.50; // Higher weight when no sources
+  const recencyWeight = sources.length > 0 ? 0.10 : 0.05;
+  const agreementWeight = sources.length > 0 ? 0.10 : 0.05;
+  
   const raw =
-    0.45 * sourceQuality +
-    0.30 * modelConsensus +
-    0.10 * recency +
-    0.10 * agreement -
+    sourceWeight * sourceQuality +
+    modelWeight * modelConsensus +
+    recencyWeight * recency +
+    agreementWeight * agreement -
     0.05 * biasPenalty;
 
-  return Math.max(0, Math.min(100, Math.round(raw * 100)));
+  const finalScore = Math.max(0, Math.min(100, Math.round(raw * 100)));
+  
+  // Log calculation for debugging
+  if (sources.length === 0) {
+    console.log(`[TrustScore] No sources - using model consensus: ${modelConsensus}, final: ${finalScore}`);
+  }
+  
+  return finalScore;
 }
 
 export function calculateRecencyScore(sources: Source[]): number {
