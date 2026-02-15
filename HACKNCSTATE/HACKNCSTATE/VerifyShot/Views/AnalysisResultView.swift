@@ -61,9 +61,6 @@ struct AnalysisResultView: View {
                             .padding(.horizontal, 20)
                     }
 
-                    // ── Section 9: Action Buttons ──
-                    actionButtons
-
                     Spacer(minLength: 120)
                 }
                 .padding(.top, 8)
@@ -73,9 +70,15 @@ struct AnalysisResultView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .foregroundColor(.vsNavy)
+                    Button {
+                        appState.enterChatFromResults()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                            Text("Chat")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.vsOrange)
                     }
                 }
             }
@@ -266,43 +269,6 @@ struct AnalysisResultView: View {
         }
     }
 
-    // MARK: - Action Buttons
-
-    private var actionButtons: some View {
-        HStack(spacing: 16) {
-            Button {
-                appState.enterChatFromResults()
-            } label: {
-                HStack {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                    Text("Ask AI")
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color.vsNavy)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-
-            Button {
-                appState.isDeepResearchMode = true
-                appState.enterChatFromResults()
-            } label: {
-                HStack {
-                    Image(systemName: "sparkle.magnifyingglass")
-                    Text("Deep Research")
-                }
-                .font(.headline)
-                .foregroundColor(.vsNavy)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color.vsGray)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-        }
-        .padding(.horizontal, 20)
-    }
 
     // MARK: - Helpers
 

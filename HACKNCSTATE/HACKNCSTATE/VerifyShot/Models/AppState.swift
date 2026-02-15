@@ -16,10 +16,12 @@ final class AppState: ObservableObject {
     @Published var analysisError: String?
     @Published var progressText: String = ""
 
-    // Chat (inline on home screen)
+    // Chat
     @Published var chatMessages: [ChatMessage] = []
     @Published var isChatting = false
     @Published var isDeepResearchMode = false
+    @Published var researchSteps: [ResearchStep] = []
+    @Published var showAnalysisDetail = false
 
     // Navigation
     @Published var showAnalysis = false
@@ -36,7 +38,7 @@ final class AppState: ObservableObject {
 
     enum Tab: Int {
         case home = 0
-        case results = 1
+        case chat = 1
         case history = 2
     }
 
@@ -74,7 +76,7 @@ final class AppState: ObservableObject {
                 self.imageUrl = result.imageUrl
                 self.isAnalyzing = false
                 self.showAnalysis = true
-                self.selectedTab = .results
+                self.selectedTab = .chat
                 self.history.insert(result, at: 0)
                 self.progressText = ""
             } catch {
@@ -186,6 +188,11 @@ final class AppState: ObservableObject {
         chatMessages.append(userMsg)
         isChatting = true
 
+        // If deep research mode, show animated research steps
+        if isDeepResearchMode {
+            startResearchSteps()
+        }
+
         let mode = isDeepResearchMode ? "deep_research" : "standard"
 
         let context: String
@@ -205,9 +212,20 @@ final class AppState: ObservableObject {
                     context: context,
                     mode: mode
                 )
+                
+                // Mark all research steps as complete
+                if isDeepResearchMode {
+                    completeResearchSteps()
+                }
+                
                 let assistantMsg = ChatMessage(role: .assistant, content: reply)
                 self.chatMessages.append(assistantMsg)
             } catch {
+                // Mark research steps as complete even on error
+                if isDeepResearchMode {
+                    completeResearchSteps()
+                }
+                
                 let errMsg = ChatMessage(
                     role: .assistant,
                     content: "Error: \(error.localizedDescription)"
@@ -217,18 +235,37 @@ final class AppState: ObservableObject {
             self.isChatting = false
         }
     }
+    
+    // MARK: - Deep Research Steps
+    
+    func startResearchSteps() {
+        researchSteps = [
+            ResearchStep(title: "Understanding your question...", icon: "sparkles", delay: 0),
+            ResearchStep(title: "Searching verified sources...", icon: "magnifyingglass", delay: 1.0),
+            ResearchStep(title: "Analyzing with AI models...", icon: "cpu", delay: 3.0),
+            ResearchStep(title: "Cross-referencing claims...", icon: "arrow.triangle.branch", delay: 5.0),
+            ResearchStep(title: "Synthesizing findings...", icon: "text.badge.checkmark", delay: 7.0),
+        ]
+    }
+    
+    func completeResearchSteps() {
+        researchSteps = researchSteps.map { step in
+            ResearchStep(title: step.title, icon: step.icon, delay: step.delay, isComplete: true)
+        }
+    }
 
     // MARK: - Enter Chat from Analysis Results
 
     func enterChatFromResults() {
         guard let result = analysisResult else { return }
-        chatMessages = []
-        let welcomeMsg = ChatMessage(
-            role: .assistant,
-            content: "I have context from your screenshot analysis (\(result.aggregateTrustScore)% trust score, \(result.claims.count) claim\(result.claims.count == 1 ? "" : "s")). What would you like to know?"
-        )
-        chatMessages.append(welcomeMsg)
-        selectedTab = .home
+        if chatMessages.isEmpty {
+            let welcomeMsg = ChatMessage(
+                role: .assistant,
+                content: "I have context from your screenshot analysis (\(result.aggregateTrustScore)% trust score, \(result.claims.count) claim\(result.claims.count == 1 ? "" : "s")). What would you like to know?"
+            )
+            chatMessages.append(welcomeMsg)
+        }
+        selectedTab = .chat
     }
 
     // MARK: - Clear chat (back to home)
@@ -248,5 +285,7 @@ final class AppState: ObservableObject {
         showDeepResearch = false
         progressText = ""
         isDeepResearchMode = false
+        researchSteps = []
+        showAnalysisDetail = false
     }
 }

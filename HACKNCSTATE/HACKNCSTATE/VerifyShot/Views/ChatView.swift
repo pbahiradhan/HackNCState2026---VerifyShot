@@ -1,134 +1,248 @@
 import SwiftUI
 
-// MARK: - AI Chat View (works with or without screenshot context)
+// MARK: - Research Chat View (Manus AI-style)
 
 struct ChatView: View {
     @EnvironmentObject var appState: AppState
     @State private var inputText = ""
     @FocusState private var isInputFocused: Bool
+    @State private var showModeToggle = true
 
     private var hasAnalysisContext: Bool {
         appState.analysisResult != nil
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Chat messages
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            // Context header (only when screenshot analyzed)
-                            if let result = appState.analysisResult {
-                                contextBanner(result)
-                            }
-
-                            // Welcome message (only if no messages yet)
-                            if appState.chatMessages.isEmpty {
-                                welcomeMessage
-                            }
-
-                            // Messages
-                            ForEach(appState.chatMessages) { msg in
-                                messageBubble(msg)
-                                    .id(msg.id)
-                            }
-
-                            // Typing indicator
-                            if appState.isChatting {
-                                typingIndicator
-                            }
-                        }
-                        .padding(16)
-                    }
-                    .onChange(of: appState.chatMessages.count) { _, _ in
-                        if let last = appState.chatMessages.last {
-                            withAnimation {
-                                proxy.scrollTo(last.id, anchor: .bottom)
-                            }
-                        }
-                    }
-                }
-
-                Divider()
-
-                // Input bar (ChatGPT-style: text field + arrow up)
-                inputBar
+        VStack(spacing: 0) {
+            // Mode toggle (Standard vs Deep Research)
+            if showModeToggle {
+                modeToggle
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
             }
-            .background(Color.vsBackground)
-            .navigationTitle(hasAnalysisContext ? "Ask AI" : "Verify")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        appState.clearChat()
+
+            // Chat messages
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        // Context banner (when screenshot analyzed)
+                        if let result = appState.analysisResult {
+                            contextBanner(result)
+                        }
+
+                        // Welcome message (only if no messages yet)
+                        if appState.chatMessages.isEmpty {
+                            welcomeMessage
+                        }
+
+                        // Messages
+                        ForEach(appState.chatMessages) { msg in
+                            messageBubble(msg)
+                                .id(msg.id)
+                        }
+
+                        // Research steps (Deep Research mode only)
+                        if appState.isDeepResearchMode && !appState.researchSteps.isEmpty {
+                            researchStepsPanel
+                        }
+
+                        // Typing indicator (Standard mode)
+                        if appState.isChatting && !appState.isDeepResearchMode {
+                            typingIndicator
+                        }
                     }
-                    .foregroundColor(.vsOrange)
+                    .padding(16)
                 }
+                .onChange(of: appState.chatMessages.count) { _, _ in
+                    if let last = appState.chatMessages.last {
+                        withAnimation {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            // Input bar
+            inputBar
+        }
+        .background(Color.vsBackground)
+        .navigationTitle("Verify")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Clear") {
+                    appState.clearChat()
+                }
+                .foregroundColor(.vsOrange)
             }
         }
     }
 
-    // MARK: - Context banner
+    // MARK: - Mode Toggle
+
+    private var modeToggle: some View {
+        HStack(spacing: 0) {
+            Button {
+                appState.isDeepResearchMode = false
+            } label: {
+                Text("Standard")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(appState.isDeepResearchMode ? .vsDarkGray : .white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(appState.isDeepResearchMode ? Color.clear : Color.vsNavy)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            Button {
+                appState.isDeepResearchMode = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkle.magnifyingglass")
+                        .font(.caption)
+                    Text("Deep Research")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundColor(appState.isDeepResearchMode ? .white : .vsDarkGray)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(appState.isDeepResearchMode ? Color.vsOrange : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+        .padding(4)
+        .background(Color.vsGray)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    // MARK: - Context Banner
 
     private func contextBanner(_ result: AnalysisResult) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "photo.fill")
-                .foregroundColor(.vsOrange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Screenshot Context Active")
+        Button {
+            appState.showAnalysisDetail = true
+        } label: {
+            HStack(spacing: 12) {
+                // Screenshot thumbnail
+                if let img = appState.screenshotImage {
+                    Image(uiImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 50, height: 50)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.vsGray)
+                        .frame(width: 50, height: 50)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .foregroundColor(.vsDarkGray)
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Screenshot Analysis Active")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(.vsNavy)
+                    HStack(spacing: 6) {
+                        Text("\(result.aggregateTrustScore)%")
+                            .font(.caption.weight(.bold))
+                            .foregroundColor(.forTrustScore(result.aggregateTrustScore))
+                        Text("•")
+                            .foregroundColor(.vsDarkGray)
+                        Text("\(result.claims.count) claim\(result.claims.count == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundColor(.vsDarkGray)
+                    }
+                }
+
+                Spacer()
+
+                Text("View Full")
                     .font(.caption.weight(.semibold))
-                    .foregroundColor(.vsNavy)
-                Text("\(result.claims.count) claim(s) • \(result.aggregateTrustScore)% trust")
-                    .font(.caption2)
-                    .foregroundColor(.vsDarkGray)
+                    .foregroundColor(.vsOrange)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.vsOrange.opacity(0.1))
+                    .clipShape(Capsule())
             }
-            Spacer()
+            .padding(12)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
         }
-        .padding(12)
-        .background(Color.vsOrange.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .sheet(isPresented: $appState.showAnalysisDetail) {
+            NavigationStack {
+                AnalysisResultView()
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Done") {
+                                appState.showAnalysisDetail = false
+                            }
+                            .foregroundColor(.vsOrange)
+                        }
+                    }
+            }
+        }
     }
 
-    // MARK: - Welcome
+    // MARK: - Welcome Message
 
     private var welcomeMessage: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "sparkles")
-                .font(.largeTitle)
-                .foregroundColor(.vsOrange)
+        VStack(spacing: 16) {
+            // VerifyShot branding
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.vsOrangeLight, Color.vsOrange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 80, height: 80)
+                    .shadow(color: .vsOrange.opacity(0.3), radius: 12, y: 6)
+                
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(.white)
+            }
 
-            if hasAnalysisContext {
-                Text("Ask me about this screenshot")
-                    .font(.headline)
+            VStack(spacing: 8) {
+                Text("Welcome to VerifyShot")
+                    .font(.title2.bold())
                     .foregroundColor(.vsNavy)
-                Text("I'll reference the sources we found to help you verify the claims.")
-                    .font(.subheadline)
-                    .foregroundColor(.vsDarkGray)
-                    .multilineTextAlignment(.center)
 
-                VStack(spacing: 8) {
+                if hasAnalysisContext {
+                    Text("Ask me about your screenshot analysis")
+                        .font(.subheadline)
+                        .foregroundColor(.vsDarkGray)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("Upload a screenshot or ask me to verify any claim")
+                        .font(.subheadline)
+                        .foregroundColor(.vsDarkGray)
+                        .multilineTextAlignment(.center)
+                }
+            }
+
+            // Suggestion chips
+            VStack(spacing: 8) {
+                if hasAnalysisContext {
                     quickChip("Is this claim true?")
                     quickChip("What are the main sources?")
                     quickChip("Is there any bias?")
-                }
-            } else {
-                Text("What would you like to verify?")
-                    .font(.headline)
-                    .foregroundColor(.vsNavy)
-                Text("Ask me to fact-check any claim, news, or statement.")
-                    .font(.subheadline)
-                    .foregroundColor(.vsDarkGray)
-                    .multilineTextAlignment(.center)
-
-                VStack(spacing: 8) {
-                    quickChip("Is climate change accelerating?")
-                    quickChip("Did the latest jobs report beat expectations?")
-                    quickChip("Is this health claim backed by science?")
+                } else {
+                    quickChip("Is this news real?")
+                    quickChip("Check a health claim")
+                    quickChip("Verify a statistic")
                 }
             }
+            .padding(.top, 8)
         }
-        .padding(.vertical, 20)
+        .padding(.vertical, 32)
     }
 
     private func quickChip(_ text: String) -> some View {
@@ -143,12 +257,12 @@ struct ChatView: View {
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
                 .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
         }
     }
 
-    // MARK: - Message bubble
+    // MARK: - Message Bubble
 
     private func messageBubble(_ message: ChatMessage) -> some View {
         HStack {
@@ -172,7 +286,17 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Typing indicator
+    // MARK: - Research Steps Panel
+
+    private var researchStepsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(appState.researchSteps.enumerated()), id: \.element.id) { index, step in
+                ResearchStepCard(step: step, index: index)
+            }
+        }
+    }
+
+    // MARK: - Typing Indicator
 
     private var typingIndicator: some View {
         HStack {
@@ -186,16 +310,26 @@ struct ChatView: View {
             }
             .padding(14)
             .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             Spacer(minLength: 60)
         }
     }
 
-    // MARK: - Input bar (ChatGPT style: text field + arrow up send)
+    // MARK: - Input Bar
 
     private var inputBar: some View {
         HStack(spacing: 12) {
-            TextField("Ask about this screenshot…", text: $inputText, axis: .vertical)
+            // Deep research indicator
+            if appState.isDeepResearchMode {
+                Image(systemName: "sparkle.magnifyingglass")
+                    .font(.caption)
+                    .foregroundColor(.vsOrange)
+                    .padding(8)
+                    .background(Color.vsOrange.opacity(0.1))
+                    .clipShape(Circle())
+            }
+
+            TextField(hasAnalysisContext ? "Ask about this screenshot…" : "Ask me to verify a claim…", text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
                 .focused($isInputFocused)
@@ -228,5 +362,69 @@ struct ChatView: View {
         guard !text.isEmpty else { return }
         inputText = ""
         appState.sendChatMessage(text)
+    }
+}
+
+// MARK: - Research Step Card
+
+struct ResearchStepCard: View {
+    let step: ResearchStep
+    let index: Int
+    @State private var isVisible = false
+    @State private var isComplete = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(isComplete ? Color.vsGreen.opacity(0.15) : Color.vsOrange.opacity(0.15))
+                    .frame(width: 40, height: 40)
+                
+                if isComplete {
+                    Image(systemName: "checkmark")
+                        .font(.caption.bold())
+                        .foregroundColor(.vsGreen)
+                } else {
+                    Image(systemName: step.icon)
+                        .font(.caption)
+                        .foregroundColor(.vsOrange)
+                }
+            }
+
+            Text(step.title)
+                .font(.subheadline)
+                .foregroundColor(.vsNavy)
+
+            Spacer()
+        }
+        .padding(12)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+        .opacity(isVisible ? 1 : 0)
+        .offset(y: isVisible ? 0 : 10)
+        .onAppear {
+            // Animate in with delay
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(step.delay)) {
+                isVisible = true
+            }
+            
+            // Mark as complete when step.isComplete changes
+            if step.isComplete {
+                DispatchQueue.main.asyncAfter(deadline: .now() + step.delay + 0.3) {
+                    withAnimation(.spring(response: 0.3)) {
+                        isComplete = true
+                    }
+                }
+            }
+        }
+        .onChange(of: step.isComplete) { _, newValue in
+            if newValue {
+                withAnimation(.spring(response: 0.3)) {
+                    isComplete = true
+                }
+            }
+        }
     }
 }

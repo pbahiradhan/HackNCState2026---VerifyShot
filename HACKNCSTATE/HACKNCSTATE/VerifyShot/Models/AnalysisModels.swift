@@ -74,8 +74,37 @@ struct ChatMessage: Identifiable {
     let id = UUID()
     let role: Role
     let content: String
+    let messageType: MessageType
+    
+    init(role: Role, content: String, messageType: MessageType = .text) {
+        self.role = role
+        self.content = content
+        self.messageType = messageType
+    }
 
     enum Role { case user, assistant }
+    enum MessageType {
+        case text
+        case researchStep
+        case sourceGroup
+    }
+}
+
+// MARK: - Research Steps
+
+struct ResearchStep: Identifiable {
+    let id = UUID()
+    let title: String
+    let icon: String
+    let isComplete: Bool
+    let delay: TimeInterval
+    
+    init(title: String, icon: String, delay: TimeInterval = 0, isComplete: Bool = false) {
+        self.title = title
+        self.icon = icon
+        self.delay = delay
+        self.isComplete = isComplete
+    }
 }
 
 struct ChatResponse: Codable {

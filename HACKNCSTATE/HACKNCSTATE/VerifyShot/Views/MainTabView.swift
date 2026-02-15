@@ -12,13 +12,9 @@ struct MainTabView: View {
                 .tag(AppState.Tab.home)
 
                 NavigationStack {
-                    if appState.analysisResult != nil {
-                        AnalysisResultView()
-                    } else {
-                        EmptyResultsView()
-                    }
+                    ChatView()
                 }
-                .tag(AppState.Tab.results)
+                .tag(AppState.Tab.chat)
 
                 NavigationStack {
                     HistoryView()
@@ -45,16 +41,16 @@ struct CustomTabBar: View {
             tabButton(icon: "house.fill", label: "Home", tab: .home)
             Spacer()
 
-            // Center search button → results
+            // Center chat button
             Button {
-                selected = .results
+                selected = .chat
             } label: {
                 ZStack {
                     Circle()
                         .fill(Color.vsNavy)
                         .frame(width: 56, height: 56)
                         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-                    Image(systemName: "magnifyingglass")
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
                         .font(.title2.bold())
                         .foregroundColor(.white)
                 }
@@ -91,24 +87,6 @@ struct CustomTabBar: View {
     }
 }
 
-// MARK: - Empty Results placeholder
-
-struct EmptyResultsView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 48))
-                .foregroundColor(.vsDarkGray)
-            Text("No analysis yet")
-                .font(.title3.weight(.medium))
-                .foregroundColor(.vsDarkGray)
-            Text("Upload or take a screenshot to get started")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-        }
-        .navigationTitle("Results")
-    }
-}
 
 // MARK: - History View
 
@@ -126,7 +104,7 @@ struct HistoryView: View {
                             HistoryRow(result: result)
                                 .onTapGesture {
                                     appState.analysisResult = result
-                                    appState.selectedTab = .results
+                                    appState.selectedTab = .chat
                                 }
                         }
                     }
