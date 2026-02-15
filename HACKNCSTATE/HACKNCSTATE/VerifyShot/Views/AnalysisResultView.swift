@@ -36,7 +36,7 @@ struct AnalysisResultView: View {
                     summaryCard(result.summary)
 
                     // ── Section 5: Claims Breakdown ──
-                    if result.claims.count > 1 {
+                    if !result.claims.isEmpty {
                         claimsSection(result.claims)
                     }
 
