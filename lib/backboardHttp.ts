@@ -174,14 +174,20 @@ Analyze this content and return the JSON response.`;
 
   // Send message
   console.log("[Backboard] Sending comprehensive analysis request…");
+  
+  // Backboard API expects form data, not JSON
+  const formData = new URLSearchParams();
+  formData.append("content", userMessage);
+  formData.append("stream", "false");
+  formData.append("memory", "Auto");
+  
   const messageRes = await fetch(`${BASE_URL}/threads/${threadId}/messages`, {
     method: "POST",
-    headers: getHeaders(),
-    body: JSON.stringify({
-      content: userMessage,
-      stream: false,
-      memory: "Auto",
-    }),
+    headers: {
+      ...getHeaders(),
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: formData.toString(),
   });
 
   if (!messageRes.ok) {
@@ -316,14 +322,19 @@ export async function chatAboutJob(
   console.log(`[Backboard] Chat (${mode}): sending message…`);
   let resp: any;
   try {
+    // Backboard API expects form data, not JSON
+    const formData = new URLSearchParams();
+    formData.append("content", userMessage);
+    formData.append("stream", "false");
+    formData.append("memory", "Auto");
+    
     const messageRes = await fetch(`${BASE_URL}/threads/${threadId}/messages`, {
       method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify({
-        content: userMessage,
-        stream: false,
-        memory: "Auto",
-      }),
+      headers: {
+        ...getHeaders(),
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData.toString(),
     });
 
     if (!messageRes.ok) {
