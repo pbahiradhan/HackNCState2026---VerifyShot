@@ -24,13 +24,6 @@ final class AppState: ObservableObject {
     // Navigation
     @Published var showAnalysis = false
     @Published var showDeepResearch = false
-    @Published var showBiasAnalysis = false
-    
-    // Bias Analysis
-    @Published var biasAnalysisResult: BiasAnalysisResult?
-    @Published var isAnalyzingBias = false
-    @Published var biasAnalysisError: String?
-    @Published var modelUpdates: [ModelBiasUpdate] = []
 
     // Selected tab
     @Published var selectedTab: Tab = .home
@@ -69,6 +62,10 @@ final class AppState: ObservableObject {
                 }
                 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.progressText = "Detecting bias across perspectives…"
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                     self.progressText = "Calculating trust score…"
                 }
                 
@@ -241,33 +238,6 @@ final class AppState: ObservableObject {
         isDeepResearchMode = false
     }
 
-    // MARK: - Bias Analysis
-
-    func analyzeBias(jobId: String, ocrText: String, claims: [String]) {
-        isAnalyzingBias = true
-        biasAnalysisError = nil
-        modelUpdates = []
-        biasAnalysisResult = nil
-
-        Task {
-            do {
-                let result = try await api.analyzeBias(
-                    jobId: jobId,
-                    ocrText: ocrText,
-                    claims: claims
-                )
-                // Update model updates from result
-                self.modelUpdates = result.modelAssessments
-                self.biasAnalysisResult = result
-                self.isAnalyzingBias = false
-            } catch {
-                self.biasAnalysisError = error.localizedDescription
-                self.isAnalyzingBias = false
-                print("[AppState] Bias analysis error: \(error.localizedDescription)")
-            }
-        }
-    }
-
     func resetForNewScreenshot() {
         screenshotImage = nil
         imageUrl = nil
@@ -276,9 +246,6 @@ final class AppState: ObservableObject {
         chatMessages = []
         showAnalysis = false
         showDeepResearch = false
-        showBiasAnalysis = false
-        biasAnalysisResult = nil
-        modelUpdates = []
         progressText = ""
         isDeepResearchMode = false
     }

@@ -1,10 +1,10 @@
 // ──────────────────────────────────────────────
-//  Multi-Perspective Bias Detection
-//  3 perspectives × 3 models = 9 independent assessments
+//  Multi-Perspective Bias Detection (3 calls)
+//  1 perspective × 1 model = 3 parallel assessments
 //  Uses Backboard.io HTTP API (no SDK)
 // ──────────────────────────────────────────────
 
-import { BiasSignals, Source, ModelBiasUpdate, BiasAnalysisResult } from "./types";
+import { BiasSignals, Source } from "./types";
 
 const BASE_URL = "https://app.backboard.io/api";
 
@@ -25,33 +25,33 @@ const assistantCache: Record<string, string> = {};
 async function getOrCreatePerspectiveAssistant(
   perspective: "us-left" | "us-right" | "international"
 ): Promise<string> {
-  const name = `VerifyShot-Bias-${perspective}-v2`;
+  const name = `VerifyShot-Bias-${perspective}-v3`;
   if (assistantCache[name]) return assistantCache[name];
 
-  // Perspective-specific prompts (NO curly braces!)
+  // Perspective-specific prompts (NO curly braces — Backboard uses Python .format())
   const prompts: Record<string, string> = {
     "us-left": [
       "You are a media bias analyst specializing in progressive and left-leaning framing.",
       "Analyze claims for political bias and sensationalism.",
       "Consider how language, framing, and fact selection might appeal to left-leaning audiences.",
-      "Return JSON with: politicalBias (number -1 to 1), sensationalism (number 0 to 1), reasoning (string).",
-      "No markdown, no code blocks, just JSON.",
+      "Return ONLY valid JSON with these fields: politicalBias (number -1 to 1), sensationalism (number 0 to 1), reasoning (string).",
+      "No markdown, no code blocks, no extra text. Just the JSON object.",
     ].join("\n"),
-    
+
     "us-right": [
       "You are a media bias analyst specializing in conservative and right-leaning framing.",
       "Analyze claims for political bias and sensationalism.",
       "Consider how language, framing, and fact selection might appeal to right-leaning audiences.",
-      "Return JSON with: politicalBias (number -1 to 1), sensationalism (number 0 to 1), reasoning (string).",
-      "No markdown, no code blocks, just JSON.",
+      "Return ONLY valid JSON with these fields: politicalBias (number -1 to 1), sensationalism (number 0 to 1), reasoning (string).",
+      "No markdown, no code blocks, no extra text. Just the JSON object.",
     ].join("\n"),
-    
+
     "international": [
       "You are a neutral international media analyst from a non-US perspective.",
       "Analyze claims for political bias and sensationalism objectively.",
       "Consider how the framing might appear to audiences outside the US political context.",
-      "Return JSON with: politicalBias (number -1 to 1), sensationalism (number 0 to 1), reasoning (string).",
-      "No markdown, no code blocks, just JSON.",
+      "Return ONLY valid JSON with these fields: politicalBias (number -1 to 1), sensationalism (number 0 to 1), reasoning (string).",
+      "No markdown, no code blocks, no extra text. Just the JSON object.",
     ].join("\n"),
   };
 
@@ -66,7 +66,7 @@ async function getOrCreatePerspectiveAssistant(
       const existing = Array.isArray(assistants)
         ? assistants.find((a: any) => a.name === name)
         : null;
-      
+
       if (existing?.assistant_id) {
         assistantCache[name] = existing.assistant_id;
         return existing.assistant_id;
@@ -107,27 +107,32 @@ interface ModelBiasAssessment {
   reasoning: string;
 }
 
-async function assessBiasFromModel(
+async function assessBias(
   assistantId: string,
   claims: string[],
+  ocrText: string,
   sources: Source[],
-  provider: string,
-  modelName: string,
-  displayName: string
+  perspectiveLabel: string
 ): Promise<ModelBiasAssessment> {
   const srcBlock = sources.length > 0
-    ? sources.map((s, i) => `[${i + 1}] ${s.title} (${s.domain})\n${s.snippet}`).join("\n\n")
-    : "No sources available.";
+    ? sources.slice(0, 5).map((s, i) => `[${i + 1}] ${s.title} (${s.domain})\n${s.snippet}`).join("\n\n")
+    : "";
+
+  const contextBlock = ocrText
+    ? `ORIGINAL TEXT:\n${ocrText.slice(0, 800)}`
+    : "";
 
   const userMessage = `CLAIMS TO ANALYZE:
 ${claims.map((c, i) => `${i + 1}. "${c}"`).join("\n")}
 
-CONTEXT:
-${srcBlock}
+${contextBlock}
+
+${srcBlock ? `SOURCES:\n${srcBlock}` : ""}
 
 Analyze the language, framing, and tone of these claims for political bias and sensationalism. Return JSON with politicalBias (number -1 to 1), sensationalism (number 0 to 1), and reasoning (string).`;
 
   try {
+    // Create thread
     const threadRes = await fetch(`${BASE_URL}/assistants/${assistantId}/threads`, {
       method: "POST",
       headers: getHeaders(),
@@ -141,12 +146,12 @@ Analyze the language, framing, and tone of these claims for political bias and s
     const thread = (await threadRes.json()) as any;
     const threadId = thread.thread_id;
 
+    // Send message
     const formData = new URLSearchParams();
     formData.append("content", userMessage);
     formData.append("stream", "false");
-    formData.append("memory", "Auto");  // Use memory for learning
-    formData.append("llm_provider", provider);
-    formData.append("model_name", modelName);
+    formData.append("llm_provider", "openai");
+    formData.append("model_name", "gpt-4o");
 
     const messageRes = await fetch(`${BASE_URL}/threads/${threadId}/messages`, {
       method: "POST",
@@ -161,7 +166,8 @@ Analyze the language, framing, and tone of these claims for political bias and s
 
     const resp = (await messageRes.json()) as any;
     let content = resp.content || resp.message?.content || "";
-    
+
+    // Parse JSON from response
     content = content.trim();
     if (content.startsWith("```")) {
       content = content.replace(/```(?:json)?\n?/g, "").replace(/```\s*$/g, "").trim();
@@ -169,9 +175,9 @@ Analyze the language, framing, and tone of these claims for political bias and s
 
     const firstBrace = content.indexOf("{");
     const lastBrace = content.lastIndexOf("}");
-    
+
     if (firstBrace === -1 || lastBrace === -1) {
-      throw new Error(`No JSON object found: ${content.slice(0, 200)}`);
+      throw new Error(`No JSON found in ${perspectiveLabel} response: ${content.slice(0, 200)}`);
     }
 
     const jsonStr = content.substring(firstBrace, lastBrace + 1);
@@ -183,7 +189,7 @@ Analyze the language, framing, and tone of these claims for political bias and s
       reasoning: parsed.reasoning || "Bias assessment completed.",
     };
   } catch (err: any) {
-    console.error(`[BiasDetection] Assessment failed for ${displayName}:`, err.message);
+    console.error(`[BiasDetection] ${perspectiveLabel} failed:`, err.message);
     return {
       politicalBias: 0,
       sensationalism: 0.3,
@@ -192,11 +198,16 @@ Analyze the language, framing, and tone of these claims for political bias and s
   }
 }
 
-export async function detectBiasMultiPerspective(
+// ──────────────────────────────────────────────
+//  Main export: 3 parallel calls, returns BiasSignals
+// ──────────────────────────────────────────────
+
+export async function detectBias(
   claims: string[],
+  ocrText: string,
   sources: Source[]
 ): Promise<BiasSignals> {
-  console.log(`[BiasDetection] Starting multi-perspective analysis for ${claims.length} claim(s)...`);
+  console.log(`[BiasDetection] Starting 3-perspective analysis for ${claims.length} claim(s)…`);
 
   // Step 1: Get/create 3 perspective assistants (parallel)
   const [leftId, rightId, intlId] = await Promise.all([
@@ -205,60 +216,32 @@ export async function detectBiasMultiPerspective(
     getOrCreatePerspectiveAssistant("international"),
   ]);
 
-  // Step 2: Run 9 model assessments (ALL parallel)
-  const models = [
-    { provider: "openai", name: "gpt-4o", displayName: "GPT-4o" },
-    { provider: "anthropic", name: "claude-3-5-sonnet-20241022", displayName: "Claude 3.5 Sonnet" },
-    { provider: "google", name: "gemini-1.5-pro", displayName: "Gemini 1.5 Pro" },
-  ];
-
-  const assessments = await Promise.all([
-    // US Left × 3 models
-    assessBiasFromModel(leftId, claims, sources, models[0].provider, models[0].name, `US Left (${models[0].displayName})`),
-    assessBiasFromModel(leftId, claims, sources, models[1].provider, models[1].name, `US Left (${models[1].displayName})`),
-    assessBiasFromModel(leftId, claims, sources, models[2].provider, models[2].name, `US Left (${models[2].displayName})`),
-    
-    // US Right × 3 models
-    assessBiasFromModel(rightId, claims, sources, models[0].provider, models[0].name, `US Right (${models[0].displayName})`),
-    assessBiasFromModel(rightId, claims, sources, models[1].provider, models[1].name, `US Right (${models[1].displayName})`),
-    assessBiasFromModel(rightId, claims, sources, models[2].provider, models[2].name, `US Right (${models[2].displayName})`),
-    
-    // International × 3 models
-    assessBiasFromModel(intlId, claims, sources, models[0].provider, models[0].name, `International (${models[0].displayName})`),
-    assessBiasFromModel(intlId, claims, sources, models[1].provider, models[1].name, `International (${models[1].displayName})`),
-    assessBiasFromModel(intlId, claims, sources, models[2].provider, models[2].name, `International (${models[2].displayName})`),
+  // Step 2: Run 3 assessments in parallel (one per perspective)
+  const [leftResult, rightResult, intlResult] = await Promise.all([
+    assessBias(leftId, claims, ocrText, sources, "US Left"),
+    assessBias(rightId, claims, ocrText, sources, "US Right"),
+    assessBias(intlId, claims, ocrText, sources, "International"),
   ]);
 
-  // Step 3: Aggregate by perspective
-  const leftAssessments = assessments.slice(0, 3);
-  const rightAssessments = assessments.slice(3, 6);
-  const intlAssessments = assessments.slice(6, 9);
+  console.log(`[BiasDetection] Results:`, {
+    left: { bias: leftResult.politicalBias, sens: leftResult.sensationalism },
+    right: { bias: rightResult.politicalBias, sens: rightResult.sensationalism },
+    intl: { bias: intlResult.politicalBias, sens: intlResult.sensationalism },
+  });
 
-  const leftBias = leftAssessments.reduce((s, a) => s + a.politicalBias, 0) / 3;
-  const leftSens = leftAssessments.reduce((s, a) => s + a.sensationalism, 0) / 3;
-  const leftConsensus = 1 - (calculateStdDev(leftAssessments.map(a => a.politicalBias)) / 2); // Normalize to 0-1
+  // Step 3: Aggregate
+  const allBiases = [leftResult.politicalBias, rightResult.politicalBias, intlResult.politicalBias];
+  const allSens = [leftResult.sensationalism, rightResult.sensationalism, intlResult.sensationalism];
 
-  const rightBias = rightAssessments.reduce((s, a) => s + a.politicalBias, 0) / 3;
-  const rightSens = rightAssessments.reduce((s, a) => s + a.sensationalism, 0) / 3;
-  const rightConsensus = 1 - (calculateStdDev(rightAssessments.map(a => a.politicalBias)) / 2);
+  const avgBias = allBiases.reduce((s, b) => s + b, 0) / 3;
+  const avgSens = allSens.reduce((s, b) => s + b, 0) / 3;
 
-  const intlBias = intlAssessments.reduce((s, a) => s + a.politicalBias, 0) / 3;
-  const intlSens = intlAssessments.reduce((s, a) => s + a.sensationalism, 0) / 3;
-  const intlConsensus = 1 - (calculateStdDev(intlAssessments.map(a => a.politicalBias)) / 2);
-
-  // Step 4: Overall aggregation
-  const allBiases = assessments.map(a => a.politicalBias);
-  const allSens = assessments.map(a => a.sensationalism);
-  
-  const avgBias = allBiases.reduce((s, b) => s + b, 0) / allBiases.length;
-  const avgSens = allSens.reduce((s, s2) => s + s2, 0) / allSens.length;
-  
   const stdDev = calculateStdDev(allBiases);
-  const confidence = Math.max(0, Math.min(1, 1 - (stdDev / 2))); // Inverse of std dev, normalized
-  
+  const confidence = Math.max(0, Math.min(1, 1 - stdDev));
+
   let agreement: "high" | "medium" | "low";
-  if (stdDev < 0.2) agreement = "high";
-  else if (stdDev < 0.4) agreement = "medium";
+  if (stdDev < 0.15) agreement = "high";
+  else if (stdDev < 0.35) agreement = "medium";
   else agreement = "low";
 
   // Determine overall bias label
@@ -269,42 +252,40 @@ export async function detectBiasMultiPerspective(
   else if (avgBias > 0.15) overallBias = "slight_right";
   else overallBias = "center";
 
-  // Extract key signals from reasoning
-  const allReasoning = assessments.map(a => a.reasoning).join(" ");
+  // Key signals from all reasoning
+  const allReasoning = [leftResult.reasoning, rightResult.reasoning, intlResult.reasoning].join(" ");
   const keySignals = extractKeySignals(allReasoning);
 
-  // Main explanation (use most common themes)
-  const mainExplanation = generateMainExplanation(avgBias, avgSens, agreement, keySignals);
+  // Explanation
+  const biasDesc = avgBias < -0.3 ? "left-leaning" : avgBias > 0.3 ? "right-leaning" : "relatively neutral";
+  const sensDesc = avgSens > 0.7 ? "highly sensational" : avgSens > 0.4 ? "moderately sensational" : "low sensationalism";
+  const agreeDesc = agreement === "high" ? "strong" : agreement === "medium" ? "moderate" : "low";
+  const explanation = `3-perspective analysis (US Left, US Right, International) shows ${biasDesc} framing with ${sensDesc}. ${agreeDesc} agreement among perspectives. Key signals: ${keySignals.slice(0, 3).join(", ")}.`;
 
-  console.log(`[BiasDetection] ✅ Analysis complete:`, {
-    bias: avgBias.toFixed(2),
-    sensationalism: avgSens.toFixed(2),
-    confidence: confidence.toFixed(2),
-    agreement,
-  });
+  console.log(`[BiasDetection] ✅ Done — bias: ${avgBias.toFixed(2)}, sens: ${avgSens.toFixed(2)}, agreement: ${agreement}`);
 
   return {
     politicalBias: Math.round(avgBias * 100) / 100,
     sensationalism: Math.round(avgSens * 100) / 100,
     overallBias,
-    explanation: mainExplanation,
+    explanation,
     confidence,
     agreement,
     perspectives: {
       usLeft: {
-        bias: Math.round(leftBias * 100) / 100,
-        sensationalism: Math.round(leftSens * 100) / 100,
-        consensus: Math.round(leftConsensus * 100) / 100,
+        bias: Math.round(leftResult.politicalBias * 100) / 100,
+        sensationalism: Math.round(leftResult.sensationalism * 100) / 100,
+        consensus: 1, // single model, consensus is 1
       },
       usRight: {
-        bias: Math.round(rightBias * 100) / 100,
-        sensationalism: Math.round(rightSens * 100) / 100,
-        consensus: Math.round(rightConsensus * 100) / 100,
+        bias: Math.round(rightResult.politicalBias * 100) / 100,
+        sensationalism: Math.round(rightResult.sensationalism * 100) / 100,
+        consensus: 1,
       },
       international: {
-        bias: Math.round(intlBias * 100) / 100,
-        sensationalism: Math.round(intlSens * 100) / 100,
-        consensus: Math.round(intlConsensus * 100) / 100,
+        bias: Math.round(intlResult.politicalBias * 100) / 100,
+        sensationalism: Math.round(intlResult.sensationalism * 100) / 100,
+        consensus: 1,
       },
     },
     keySignals,
@@ -321,242 +302,15 @@ function calculateStdDev(values: number[]): number {
 function extractKeySignals(reasoning: string): string[] {
   const signals: string[] = [];
   const lower = reasoning.toLowerCase();
-  
+
   if (lower.includes("emotional") || lower.includes("emotion")) signals.push("Emotional language");
   if (lower.includes("selective") || lower.includes("cherry")) signals.push("Selective fact presentation");
   if (lower.includes("loaded") || lower.includes("charged")) signals.push("Loaded terminology");
   if (lower.includes("exaggerat") || lower.includes("hyperbol")) signals.push("Exaggeration");
   if (lower.includes("framing") || lower.includes("frame")) signals.push("Framing bias");
   if (lower.includes("omission") || lower.includes("omit")) signals.push("Factual omissions");
-  
-  return signals.length > 0 ? signals : ["Standard political messaging"];
-}
+  if (lower.includes("neutral") || lower.includes("balanced")) signals.push("Balanced reporting");
+  if (lower.includes("factual") || lower.includes("objective")) signals.push("Factual tone");
 
-function generateMainExplanation(
-  bias: number,
-  sensationalism: number,
-  agreement: "high" | "medium" | "low",
-  keySignals: string[]
-): string {
-  const biasDesc = bias < -0.3 ? "left-leaning" : bias > 0.3 ? "right-leaning" : "relatively neutral";
-  const sensDesc = sensationalism > 0.7 ? "highly sensational" : sensationalism > 0.4 ? "moderately sensational" : "low sensationalism";
-  const agreeDesc = agreement === "high" ? "strong agreement" : agreement === "medium" ? "moderate agreement" : "low agreement";
-  
-  return `Analysis across 9 independent assessments (3 perspectives × 3 AI models) shows ${biasDesc} framing with ${sensDesc}. ${agreeDesc} among assessors. Key signals: ${keySignals.slice(0, 3).join(", ")}.`;
-}
-
-// ──────────────────────────────────────────────
-//  Bias Detection with Transparency (for separate API)
-// ──────────────────────────────────────────────
-
-export async function detectBiasWithTransparency(
-  claims: string[],
-  ocrText: string,
-  jobId: string,
-  onUpdate?: (update: ModelBiasUpdate) => void
-): Promise<BiasAnalysisResult> {
-  console.log(`[BiasDetection][${jobId}] Starting transparent bias analysis for ${claims.length} claim(s)...`);
-
-  // Step 1: Get/create 3 perspective assistants (parallel)
-  const [leftId, rightId, intlId] = await Promise.all([
-    getOrCreatePerspectiveAssistant("us-left"),
-    getOrCreatePerspectiveAssistant("us-right"),
-    getOrCreatePerspectiveAssistant("international"),
-  ]);
-
-  const models = [
-    { provider: "openai", name: "gpt-4o", displayName: "GPT-4o" },
-    { provider: "anthropic", name: "claude-3-5-sonnet-20241022", displayName: "Claude 3.5 Sonnet" },
-    { provider: "google", name: "gemini-1.5-pro", displayName: "Gemini 1.5 Pro" },
-  ];
-
-  // Step 2: Run 9 assessments with progress updates
-  const assessmentPromises = [
-    // US Left × 3 models
-    assessBiasWithUpdate(leftId, claims, ocrText, models[0], "us-left", onUpdate),
-    assessBiasWithUpdate(leftId, claims, ocrText, models[1], "us-left", onUpdate),
-    assessBiasWithUpdate(leftId, claims, ocrText, models[2], "us-left", onUpdate),
-    
-    // US Right × 3 models
-    assessBiasWithUpdate(rightId, claims, ocrText, models[0], "us-right", onUpdate),
-    assessBiasWithUpdate(rightId, claims, ocrText, models[1], "us-right", onUpdate),
-    assessBiasWithUpdate(rightId, claims, ocrText, models[2], "us-right", onUpdate),
-    
-    // International × 3 models
-    assessBiasWithUpdate(intlId, claims, ocrText, models[0], "international", onUpdate),
-    assessBiasWithUpdate(intlId, claims, ocrText, models[1], "international", onUpdate),
-    assessBiasWithUpdate(intlId, claims, ocrText, models[2], "international", onUpdate),
-  ];
-
-  const assessmentResults = await Promise.allSettled(assessmentPromises);
-  
-  // Extract successful assessments and model updates
-  const assessments: ModelBiasAssessment[] = [];
-  const modelUpdates: ModelBiasUpdate[] = [];
-
-  assessmentResults.forEach((result, index) => {
-    const perspective = index < 3 ? "us-left" : index < 6 ? "us-right" : "international";
-    const modelIndex = index % 3;
-    const model = models[modelIndex];
-
-    if (result.status === "fulfilled") {
-      const assessment = result.value.assessment;
-      assessments.push(assessment);
-      modelUpdates.push({
-        perspective,
-        modelName: model.displayName,
-        status: "complete",
-        reasoning: assessment.reasoning,
-        bias: assessment.politicalBias,
-        sensationalism: assessment.sensationalism,
-      });
-    } else {
-      // Failed assessment
-      assessments.push({
-        politicalBias: 0,
-        sensationalism: 0.3,
-        reasoning: `Error: ${result.reason}`,
-      });
-      modelUpdates.push({
-        perspective,
-        modelName: model.displayName,
-        status: "complete",
-        reasoning: `Error: ${result.reason}`,
-        bias: 0,
-        sensationalism: 0.3,
-      });
-    }
-  });
-
-  // Step 3: Aggregate (same logic as detectBiasMultiPerspective)
-  const leftAssessments = assessments.slice(0, 3);
-  const rightAssessments = assessments.slice(3, 6);
-  const intlAssessments = assessments.slice(6, 9);
-
-  const leftBias = leftAssessments.reduce((s, a) => s + a.politicalBias, 0) / 3;
-  const leftSens = leftAssessments.reduce((s, a) => s + a.sensationalism, 0) / 3;
-  const leftConsensus = 1 - (calculateStdDev(leftAssessments.map(a => a.politicalBias)) / 2);
-
-  const rightBias = rightAssessments.reduce((s, a) => s + a.politicalBias, 0) / 3;
-  const rightSens = rightAssessments.reduce((s, a) => s + a.sensationalism, 0) / 3;
-  const rightConsensus = 1 - (calculateStdDev(rightAssessments.map(a => a.politicalBias)) / 2);
-
-  const intlBias = intlAssessments.reduce((s, a) => s + a.politicalBias, 0) / 3;
-  const intlSens = intlAssessments.reduce((s, a) => s + a.sensationalism, 0) / 3;
-  const intlConsensus = 1 - (calculateStdDev(intlAssessments.map(a => a.politicalBias)) / 2);
-
-  const allBiases = assessments.map(a => a.politicalBias);
-  const allSens = assessments.map(a => a.sensationalism);
-  
-  const avgBias = allBiases.reduce((s, b) => s + b, 0) / allBiases.length;
-  const avgSens = allSens.reduce((s, s2) => s + s2, 0) / allSens.length;
-  
-  const stdDev = calculateStdDev(allBiases);
-  const confidence = Math.max(0, Math.min(1, 1 - (stdDev / 2)));
-  
-  let agreement: "high" | "medium" | "low";
-  if (stdDev < 0.2) agreement = "high";
-  else if (stdDev < 0.4) agreement = "medium";
-  else agreement = "low";
-
-  let overallBias: BiasSignals["overallBias"];
-  if (avgBias < -0.5) overallBias = "left";
-  else if (avgBias < -0.15) overallBias = "slight_left";
-  else if (avgBias > 0.5) overallBias = "right";
-  else if (avgBias > 0.15) overallBias = "slight_right";
-  else overallBias = "center";
-
-  const allReasoning = assessments.map(a => a.reasoning).join(" ");
-  const keySignals = extractKeySignals(allReasoning);
-  const mainExplanation = generateMainExplanation(avgBias, avgSens, agreement, keySignals);
-
-  const biasSignals: BiasSignals = {
-    politicalBias: Math.round(avgBias * 100) / 100,
-    sensationalism: Math.round(avgSens * 100) / 100,
-    overallBias,
-    explanation: mainExplanation,
-    confidence,
-    agreement,
-    perspectives: {
-      usLeft: {
-        bias: Math.round(leftBias * 100) / 100,
-        sensationalism: Math.round(leftSens * 100) / 100,
-        consensus: Math.round(leftConsensus * 100) / 100,
-      },
-      usRight: {
-        bias: Math.round(rightBias * 100) / 100,
-        sensationalism: Math.round(rightSens * 100) / 100,
-        consensus: Math.round(rightConsensus * 100) / 100,
-      },
-      international: {
-        bias: Math.round(intlBias * 100) / 100,
-        sensationalism: Math.round(intlSens * 100) / 100,
-        consensus: Math.round(intlConsensus * 100) / 100,
-      },
-    },
-    keySignals,
-  };
-
-  return {
-    biasSignals,
-    modelAssessments: modelUpdates,
-    perspectives: biasSignals.perspectives,
-  };
-}
-
-async function assessBiasWithUpdate(
-  assistantId: string,
-  claims: string[],
-  ocrText: string,
-  model: { provider: string; name: string; displayName: string },
-  perspective: "us-left" | "us-right" | "international",
-  onUpdate?: (update: ModelBiasUpdate) => void
-): Promise<{ assessment: ModelBiasAssessment; update: ModelBiasUpdate }> {
-  
-  // Emit "thinking" status
-  onUpdate?.({
-    perspective,
-    modelName: model.displayName,
-    status: "thinking",
-  });
-
-  // Emit "analyzing" status
-  onUpdate?.({
-    perspective,
-    modelName: model.displayName,
-    status: "analyzing",
-  });
-
-  // Create a synthetic source from ocrText so the model has context
-  const contextSources: Source[] = ocrText ? [{
-    title: "Original Screenshot Text",
-    url: "screenshot://original",
-    domain: "screenshot",
-    date: new Date().toISOString(),
-    credibilityScore: 0.5,
-    snippet: ocrText.slice(0, 500),
-  }] : [];
-
-  const assessment = await assessBiasFromModel(
-    assistantId,
-    claims,
-    contextSources,
-    model.provider,
-    model.name,
-    model.displayName
-  );
-
-  const update: ModelBiasUpdate = {
-    perspective,
-    modelName: model.displayName,
-    status: "complete",
-    reasoning: assessment.reasoning,
-    bias: assessment.politicalBias,
-    sensationalism: assessment.sensationalism,
-  };
-
-  // Emit "complete" with results
-  onUpdate?.(update);
-
-  return { assessment, update };
+  return signals.length > 0 ? signals : ["Standard reporting"];
 }

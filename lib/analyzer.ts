@@ -7,6 +7,7 @@
 import { extractTextFromImage } from "./geminiOcr";
 import { extractClaims, verifyClaimMultiModel, ModelVerification } from "./backboardHttp";
 import { searchSources } from "./search";
+import { detectBias } from "./biasDetection";
 import { calculateTrustScore, biasPenalty, trustLabel } from "./trustScore";
 import { AnalysisResult, Claim, Source, ModelVerdict, BiasSignals } from "./types";
 
@@ -155,18 +156,24 @@ export async function analyzeImage(
 
   console.log(`[Orchestrator][${jobId}] ✅ Multi-model verification complete`);
 
-  // ── Step 5: SKIP Bias Detection (moved to separate API call) ──
-  console.log(`[Orchestrator][${jobId}] Step 5: Skipping bias detection (available via separate API call)`);
+  // ── Step 5: Bias Detection — 3 parallel calls (1 per perspective) ──
+  console.log(`[Orchestrator][${jobId}] Step 5: Bias detection (3 perspectives, parallel)…`);
   
-  // Return placeholder bias signals - user can trigger full analysis via button
-  const biasSignals: BiasSignals = {
-    politicalBias: 0,
-    sensationalism: 0.3,
-    overallBias: "center" as const,
-    explanation: "Bias analysis available via 'Bias Analysis' button for detailed multi-perspective assessment.",
-  };
+  let biasSignals: BiasSignals;
+  try {
+    const claimTexts = extractedClaims.map(c => c.text);
+    biasSignals = await detectBias(claimTexts, ocrText, sources);
+  } catch (err: any) {
+    console.warn(`[Orchestrator][${jobId}] Bias detection failed, using defaults:`, err.message);
+    biasSignals = {
+      politicalBias: 0,
+      sensationalism: 0.3,
+      overallBias: "center" as const,
+      explanation: "Bias detection encountered an error. Results shown without bias analysis.",
+    };
+  }
 
-  console.log(`[Orchestrator][${jobId}] ✅ Using placeholder bias (full analysis available separately)`);
+  console.log(`[Orchestrator][${jobId}] ✅ Bias: ${biasSignals.overallBias}, sens: ${biasSignals.sensationalism}`);
 
   // ── Step 6: Synthesize Results (local computation, 0 API calls) ──
   console.log(`[Orchestrator][${jobId}] Step 6: Synthesizing results…`);

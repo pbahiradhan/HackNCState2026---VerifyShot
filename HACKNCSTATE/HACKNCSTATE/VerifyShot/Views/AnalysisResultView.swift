@@ -269,69 +269,35 @@ struct AnalysisResultView: View {
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
-        VStack(spacing: 12) {
-            // First row: Ask AI + Deep Research
-            HStack(spacing: 16) {
-                Button {
-                    appState.enterChatFromResults()
-                } label: {
-                    HStack {
-                        Image(systemName: "bubble.left.and.bubble.right.fill")
-                        Text("Ask AI")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.vsNavy)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-
-                Button {
-                    appState.isDeepResearchMode = true
-                    appState.enterChatFromResults()
-                } label: {
-                    HStack {
-                        Image(systemName: "sparkle.magnifyingglass")
-                        Text("Deep Research")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.vsNavy)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.vsGray)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-            }
-            
-            // Second row: Bias Analysis (full width)
+        HStack(spacing: 16) {
             Button {
-                appState.showBiasAnalysis = true
-                // Trigger bias analysis if not already done
-                if appState.biasAnalysisResult == nil, let result = appState.analysisResult {
-                    let claims = result.claims.map { $0.text }
-                    appState.analyzeBias(
-                        jobId: result.jobId,
-                        ocrText: result.ocrText,
-                        claims: claims
-                    )
-                }
+                appState.enterChatFromResults()
             } label: {
                 HStack {
-                    Image(systemName: "chart.bar.xaxis")
-                    Text("Bias Analysis")
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Text("Ask AI")
                 }
                 .font(.headline)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(
-                    LinearGradient(
-                        colors: [.vsOrange, .vsOrange.opacity(0.8)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+                .background(Color.vsNavy)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+
+            Button {
+                appState.isDeepResearchMode = true
+                appState.enterChatFromResults()
+            } label: {
+                HStack {
+                    Image(systemName: "sparkle.magnifyingglass")
+                    Text("Deep Research")
+                }
+                .font(.headline)
+                .foregroundColor(.vsNavy)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color.vsGray)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         }

@@ -89,20 +89,3 @@ struct UploadResponse: Codable {
     let jobId: String
 }
 
-// MARK: - Bias Analysis
-
-struct ModelBiasUpdate: Identifiable, Codable {
-    var id: String { "\(perspective)-\(modelName)-\(status)" }  // Must include status for uniqueness
-    let perspective: String  // "us-left" | "us-right" | "international"
-    let modelName: String
-    let status: String       // "thinking" | "analyzing" | "complete"
-    let reasoning: String?
-    let bias: Double?
-    let sensationalism: Double?
-}
-
-struct BiasAnalysisResult: Codable {
-    let biasSignals: BiasSignals
-    let modelAssessments: [ModelBiasUpdate]
-    let perspectives: BiasPerspectives?
-}

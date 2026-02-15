@@ -82,37 +82,3 @@ export interface ChatMessage {
   sources?: Source[];
 }
 
-// ──────────────────────────────────────────────
-//  Bias Analysis (separate from main analysis)
-// ──────────────────────────────────────────────
-
-export interface ModelBiasUpdate {
-  perspective: "us-left" | "us-right" | "international";
-  modelName: string;
-  status: "thinking" | "analyzing" | "complete";
-  reasoning?: string;
-  bias?: number;
-  sensationalism?: number;
-}
-
-export interface BiasAnalysisResult {
-  biasSignals: BiasSignals;
-  modelAssessments: ModelBiasUpdate[];
-  perspectives?: {
-    usLeft: {
-      bias: number;
-      sensationalism: number;
-      consensus: number;
-    };
-    usRight: {
-      bias: number;
-      sensationalism: number;
-      consensus: number;
-    };
-    international: {
-      bias: number;
-      sensationalism: number;
-      consensus: number;
-    };
-  };
-}

@@ -31,10 +31,6 @@ struct MainTabView: View {
             CustomTabBar(selected: $appState.selectedTab)
         }
         .edgesIgnoringSafeArea(.bottom)
-        .sheet(isPresented: $appState.showBiasAnalysis) {
-            BiasAnalysisView()
-                .environmentObject(appState)
-        }
     }
 }
 
