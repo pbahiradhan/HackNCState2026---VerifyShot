@@ -29,9 +29,22 @@
 		976C5C5F2F410E3F00408F91 /* HACKNCSTATEUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HACKNCSTATEUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		976C5D0C2F41610000408F91 /* Exceptions for "HACKNCSTATE" folder in "HACKNCSTATE" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				VerifyShot/Info.plist,
+			);
+			target = 976C5C442F410E3D00408F91 /* HACKNCSTATE */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		976C5C472F410E3D00408F91 /* HACKNCSTATE */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				976C5D0C2F41610000408F91 /* Exceptions for "HACKNCSTATE" folder in "HACKNCSTATE" target */,
+			);
 			path = HACKNCSTATE;
 			sourceTree = "<group>";
 		};

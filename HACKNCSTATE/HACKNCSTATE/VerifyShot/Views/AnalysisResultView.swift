@@ -280,9 +280,8 @@ struct AnalysisResultView: View {
             }
 
             Button {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    appState.showDeepResearch = true
-                }
+                appState.isDeepResearchMode = true
+                appState.enterChatFromResults()
             } label: {
                 HStack {
                     Image(systemName: "sparkle.magnifyingglass")

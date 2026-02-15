@@ -31,12 +31,6 @@ struct MainTabView: View {
             CustomTabBar(selected: $appState.selectedTab)
         }
         .edgesIgnoringSafeArea(.bottom)
-        .sheet(isPresented: $appState.showDeepResearch) {
-            DeepResearchView()
-                .environmentObject(appState)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
     }
 }
 
