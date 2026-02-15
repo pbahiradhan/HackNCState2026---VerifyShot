@@ -452,68 +452,6 @@ Analyze this content and return the JSON response.`;
   }
   
   // Continue with parsed object
-  console.log("[Backboard] ✅ Parsed JSON successfully");
-    // If parsing fails, try to fix common issues
-    console.error("[Backboard] ❌ Initial JSON parse failed:", parseError.message);
-    console.error("[Backboard] Parse error at position:", parseError.message.match(/position (\d+)/)?.[1]);
-    
-    // Try to fix escaped quotes issue - sometimes Backboard returns JSON with escaped quotes
-    let fixedContent = content;
-    
-    // Strategy 1: Fix escaped single quotes at the start/end of JSON
-    // Backboard sometimes returns {\'\\n  "claims"\'} which is invalid
-    // Remove escaped single quotes that wrap the entire JSON object
-    if (fixedContent.match(/^\{\\?['"]/)) {
-      fixedContent = fixedContent.replace(/^\{\\?['"]/, '{');
-    }
-    if (fixedContent.match(/\\?['"]\}$/)) {
-      fixedContent = fixedContent.replace(/\\?['"]\}$/, '}');
-    }
-    
-    // Strategy 2: Fix escaped single quotes that are incorrectly escaping property names
-    // Pattern: {\'\\n  "claims"\'} should become {\n  "claims"}
-    fixedContent = fixedContent.replace(/\\'/g, "'");
-    
-    // Strategy 3: Fix any double-escaped quotes
-    fixedContent = fixedContent.replace(/\\\\"/g, '\\"');
-    
-    // Strategy 4: Fix escaped newlines that might be causing issues
-    // But preserve actual newlines in string values
-    fixedContent = fixedContent.replace(/\\n\s*\\n/g, '\\n');
-    
-    // Strategy 5: Remove any remaining escaped quotes at the very start/end
-    // This handles cases where the JSON is wrapped in escaped quotes
-    fixedContent = fixedContent.trim();
-    if (fixedContent.startsWith("{\\'") || fixedContent.startsWith('{\\"')) {
-      fixedContent = '{' + fixedContent.substring(3);
-    }
-    if (fixedContent.endsWith("\\'}") || fixedContent.endsWith('\\"}')) {
-      fixedContent = fixedContent.substring(0, fixedContent.length - 3) + '}';
-    }
-    
-    console.log("[Backboard] Attempting to fix JSON...");
-    console.log("[Backboard] Fixed content (first 500 chars):", fixedContent.slice(0, 500));
-    
-    try {
-      parsed = JSON.parse(fixedContent);
-      console.log("[Backboard] ✅ Parsed JSON successfully after fixes");
-    } catch (secondError: any) {
-      // Still failed - log the exact content for debugging
-      console.error("[Backboard] ❌ JSON parse failed even after fixes");
-      console.error("[Backboard] Second error:", secondError.message);
-      console.error("[Backboard] Content around error position:", 
-        fixedContent.slice(Math.max(0, parseInt(parseError.message.match(/position (\d+)/)?.[1] || "0") - 50), 
-        parseInt(parseError.message.match(/position (\d+)/)?.[1] || "0") + 50));
-      throw new Error(
-        `Failed to parse Backboard JSON: ${parseError.message}. ` +
-        `Content preview: ${content.slice(0, 200)}... ` +
-        `Full content length: ${content.length}. ` +
-        `Check Vercel logs for full response.`
-      );
-    }
-  }
-  
-  // Now continue with the parsed object
   console.log("[Backboard] Parsed keys:", Object.keys(parsed));
   console.log("[Backboard] Claims count:", parsed.claims?.length || 0);
   
