@@ -121,8 +121,8 @@ struct ChatView: View {
     // MARK: - Context Banner
 
     private func contextBanner(_ result: AnalysisResult) -> some View {
-        Button {
-            appState.showAnalysisDetail = true
+        NavigationLink {
+            AnalysisResultView()
         } label: {
             HStack(spacing: 12) {
                 // Screenshot thumbnail
@@ -160,32 +160,25 @@ struct ChatView: View {
 
                 Spacer()
 
-                Text("View Full")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.vsOrange)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.vsOrange.opacity(0.1))
-                    .clipShape(Capsule())
+                HStack(spacing: 4) {
+                    Text("View Full")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.vsOrange)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(.vsOrange)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.vsOrange.opacity(0.1))
+                .clipShape(Capsule())
             }
             .padding(12)
             .background(Color.white)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
         }
-        .sheet(isPresented: $appState.showAnalysisDetail) {
-            NavigationStack {
-                AnalysisResultView()
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button("Done") {
-                                appState.showAnalysisDetail = false
-                            }
-                            .foregroundColor(.vsOrange)
-                        }
-                    }
-            }
-        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Welcome Message

@@ -101,11 +101,15 @@ struct HistoryView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(appState.history) { result in
-                            HistoryRow(result: result)
-                                .onTapGesture {
-                                    appState.analysisResult = result
-                                    appState.selectedTab = .chat
-                                }
+                            NavigationLink {
+                                AnalysisResultView()
+                                    .onAppear {
+                                        appState.analysisResult = result
+                                    }
+                            } label: {
+                                HistoryRow(result: result)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, 16)

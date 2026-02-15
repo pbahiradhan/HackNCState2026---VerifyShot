@@ -21,7 +21,6 @@ final class AppState: ObservableObject {
     @Published var isChatting = false
     @Published var isDeepResearchMode = false
     @Published var researchSteps: [ResearchStep] = []
-    @Published var showAnalysisDetail = false
 
     // Navigation
     @Published var showAnalysis = false
@@ -286,6 +285,5 @@ final class AppState: ObservableObject {
         progressText = ""
         isDeepResearchMode = false
         researchSteps = []
-        showAnalysisDetail = false
     }
 }
