@@ -314,44 +314,42 @@ struct HomeView: View {
     private func loadPhoto(from item: PhotosPickerItem) {
         Task {
             do {
-                // Try loading as Data first (most reliable)
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    await MainActor.run {
-                        appState.analyzeScreenshot(image)
-                    }
-                    return
-                }
-                
-                // Fallback: Try loading as UIImage directly
-                if let image = try? await item.loadTransferable(type: UIImage.self) {
-                    await MainActor.run {
-                        appState.analyzeScreenshot(image)
-                    }
-                    return
-                }
-                
-                // If both fail, show error
-                await MainActor.run {
-                    appState.analysisError = "Failed to load image. Please try selecting the photo again."
-                }
-                print("[HomeView] Failed to load photo from PhotosPickerItem")
-            } catch {
-                // The bookmark error is often harmless - try to continue anyway
-                print("[HomeView] Photo loading error (may be harmless): \(error.localizedDescription)")
-                
-                // Try one more time with a slight delay
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-                
-                if let data = try? await item.loadTransferable(type: Data.self),
+                // Load as Data (the standard way for PhotosPicker)
+                if let data = try await item.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
                     await MainActor.run {
                         appState.analyzeScreenshot(image)
                     }
                 } else {
                     await MainActor.run {
-                        appState.analysisError = "Could not load image. The bookmark error is usually harmless - please try again."
+                        appState.analysisError = "Failed to load image. Please try selecting the photo again."
                     }
+                    print("[HomeView] Failed to load photo - data was nil or couldn't create UIImage")
+                }
+            } catch {
+                // The bookmark error (Cocoa 4097) is often harmless - try to continue anyway
+                print("[HomeView] Photo loading error (may be harmless): \(error.localizedDescription)")
+                
+                // Retry with a slight delay - sometimes the system needs a moment
+                try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                
+                do {
+                    if let data = try await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                        await MainActor.run {
+                            appState.analyzeScreenshot(image)
+                        }
+                    } else {
+                        await MainActor.run {
+                            appState.analysisError = "Could not load image. Please try selecting the photo again."
+                        }
+                    }
+                } catch retryError {
+                    // If retry also fails, show user-friendly error
+                    await MainActor.run {
+                        appState.analysisError = "Unable to load image. The bookmark error is usually harmless - please try selecting the photo again."
+                    }
+                    print("[HomeView] Retry also failed: \(retryError.localizedDescription)")
                 }
             }
         }
