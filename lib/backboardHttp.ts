@@ -621,6 +621,72 @@ export async function saveAnalysisToMemory(
 }
 
 // ──────────────────────────────────────────────
+//  OCR Summary — Describes what the screenshot says
+//  Runs in parallel with claims + search to avoid delay.
+//  This lets users gauge OCR accuracy at a glance.
+// ──────────────────────────────────────────────
+
+export async function generateOCRSummary(ocrText: string): Promise<string> {
+  try {
+    const systemPrompt = [
+      "You summarize screenshot text in 2-3 sentences.",
+      "Describe WHAT the screenshot says — the topic, key points, and source if visible.",
+      "Do NOT judge whether the content is true or false.",
+      "Just describe the content factually so the user can gauge OCR accuracy.",
+      "Be concise. Do not add any preamble like 'The screenshot says' — just give the summary.",
+    ].join("\n");
+
+    const assistantId = await getOrCreateAssistant("VerifyShot-Summarizer-v1", systemPrompt);
+
+    const threadRes = await fetch(`${BASE_URL}/assistants/${assistantId}/threads`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({}),
+    });
+
+    if (!threadRes.ok) {
+      throw new Error(`Thread creation failed: ${threadRes.status}`);
+    }
+
+    const thread = (await threadRes.json()) as any;
+    const threadId = thread.thread_id;
+
+    const formData = new URLSearchParams();
+    formData.append("content", `Summarize this screenshot text in 2-3 sentences:\n\n${ocrText.slice(0, 1500)}`);
+    formData.append("stream", "false");
+    formData.append("memory", "Off");
+    formData.append("llm_provider", "openai");
+    formData.append("model_name", "gpt-4o-mini");
+
+    const messageRes = await fetch(`${BASE_URL}/threads/${threadId}/messages`, {
+      method: "POST",
+      headers: getHeaders("application/x-www-form-urlencoded"),
+      body: formData.toString(),
+    });
+
+    if (!messageRes.ok) {
+      throw new Error(`Summarizer message failed: ${messageRes.status}`);
+    }
+
+    const resp = (await messageRes.json()) as any;
+    const content = resp.content || resp.message?.content || "";
+    const summary = content.trim();
+
+    if (summary && summary.length > 10) {
+      console.log(`[Summarizer] ✅ Generated summary (${summary.length} chars)`);
+      return summary;
+    }
+
+    throw new Error("Empty summary returned");
+  } catch (err: any) {
+    console.warn(`[Summarizer] Failed (${err.message}), using OCR excerpt as fallback`);
+    // Fallback: use first 2 sentences of OCR text
+    const sentences = ocrText.split(/[.!?\n]/).map(s => s.trim()).filter(s => s.length > 15);
+    return sentences.slice(0, 2).join(". ") + (sentences.length > 0 ? "." : "");
+  }
+}
+
+// ──────────────────────────────────────────────
 //  Claim Extraction (fast, using GPT-4o-mini)
 // ──────────────────────────────────────────────
 

@@ -55,11 +55,12 @@ function credibilityForDomain(hostname: string): number {
 // ──────────────────────────────────────────────
 //  PRIMARY: AI-powered search via Perplexity
 //  Uses Backboard.io → OpenRouter → Perplexity sonar-pro
-//  Built-in web search, no separate API keys needed
+//  Perplexity has built-in web search — returns grounded results with citations.
+//  No separate Google API keys needed.
 // ──────────────────────────────────────────────
 
 const BB_URL = "https://app.backboard.io/api";
-const searchAssistantCache: { id?: string } = {};
+const searchAssistantCache: Record<string, string> = {};
 
 function bbHeaders(contentType: string = "application/json"): Record<string, string> {
   const key = process.env.BACKBOARD_API_KEY;
@@ -70,8 +71,8 @@ function bbHeaders(contentType: string = "application/json"): Record<string, str
   };
 }
 
-async function getSearchAssistant(): Promise<string> {
-  if (searchAssistantCache.id) return searchAssistantCache.id;
+async function getOrCreateSearchAssistant(name: string, systemPrompt: string): Promise<string> {
+  if (searchAssistantCache[name]) return searchAssistantCache[name];
 
   // Check if assistant already exists
   const listRes = await fetch(`${BB_URL}/assistants`, {
@@ -81,36 +82,19 @@ async function getSearchAssistant(): Promise<string> {
   if (listRes.ok) {
     const assistants = (await listRes.json()) as any[];
     const existing = Array.isArray(assistants)
-      ? assistants.find((a: any) => a.name === "VerifyShot-WebSearch-v1")
+      ? assistants.find((a: any) => a.name === name)
       : null;
     if (existing?.assistant_id) {
-      searchAssistantCache.id = existing.assistant_id;
+      searchAssistantCache[name] = existing.assistant_id;
       return existing.assistant_id;
     }
   }
-
-  // Create assistant — NO curly braces in system prompt (Backboard templates them)
-  const systemPrompt = [
-    "You are a source-finding API for fact-checking.",
-    "When given a claim or text, search the web and return relevant sources.",
-    "You MUST respond with ONLY a JSON array of source objects.",
-    "Each source object has these keys:",
-    "- \"title\" (string): the article title",
-    "- \"url\" (string): the full URL of the article",
-    "- \"domain\" (string): the domain name",
-    "- \"snippet\" (string): a 1-2 sentence excerpt from the article",
-    "- \"date\" (string): the publication date in YYYY-MM-DD format (best guess if unsure)",
-    "",
-    "Return 3-8 sources from reputable news outlets, fact-checkers, or academic sources.",
-    "Prefer Reuters, AP, BBC, NYT, WashPost, Snopes, PolitiFact, FactCheck.org, and similar.",
-    "Start your response with [ and end with ]. No other text.",
-  ].join("\n");
 
   const createRes = await fetch(`${BB_URL}/assistants`, {
     method: "POST",
     headers: bbHeaders(),
     body: JSON.stringify({
-      name: "VerifyShot-WebSearch-v1",
+      name,
       system_prompt: systemPrompt,
     }),
   });
@@ -121,13 +105,16 @@ async function getSearchAssistant(): Promise<string> {
   }
 
   const assistant = (await createRes.json()) as any;
-  searchAssistantCache.id = assistant.assistant_id;
+  searchAssistantCache[name] = assistant.assistant_id;
   return assistant.assistant_id;
 }
 
 /**
  * Search the web using Perplexity sonar-pro via Backboard.
  * Perplexity has built-in web search — no Google API keys needed.
+ *
+ * Strategy: Let Perplexity respond naturally (it returns prose with inline
+ * citations and source URLs), then parse the response for structured sources.
  */
 export async function searchWithAI(query: string, limit = 5): Promise<Source[]> {
   const key = process.env.BACKBOARD_API_KEY;
@@ -139,7 +126,21 @@ export async function searchWithAI(query: string, limit = 5): Promise<Source[]> 
   console.log(`[Search-AI] Searching: "${query.slice(0, 80)}…" (limit: ${limit})`);
 
   try {
-    const assistantId = await getSearchAssistant();
+    // ── Step 1: Get Perplexity response with web-grounded sources ──
+    // NO curly braces in system prompt (Backboard uses Python .format())
+    const perplexityPrompt = [
+      "You are a fact-checking research assistant.",
+      "When given a topic or claim, search the web for the most relevant and recent sources.",
+      "For EACH source you find, write one line in this EXACT format:",
+      "",
+      "SOURCE: title of the article | https://full-url-here | a brief 1-2 sentence summary of what the article says | YYYY-MM-DD",
+      "",
+      "List between 3 and 8 sources, one per line, each starting with SOURCE:",
+      "Prefer reputable outlets: Reuters, AP, BBC, NYT, WashPost, Snopes, PolitiFact, CNN, NPR, PBS, etc.",
+      "ONLY output SOURCE: lines. No other commentary, no introductions, no conclusions.",
+    ].join("\n");
+
+    const assistantId = await getOrCreateSearchAssistant("VerifyShot-WebSearch-v3", perplexityPrompt);
 
     // Create thread
     const threadRes = await fetch(`${BB_URL}/assistants/${assistantId}/threads`, {
@@ -155,8 +156,8 @@ export async function searchWithAI(query: string, limit = 5): Promise<Source[]> 
     const thread = (await threadRes.json()) as any;
     const threadId = thread.thread_id;
 
-    // Send search request using Perplexity sonar-pro (has built-in web search)
-    const userMessage = `Find ${limit} reliable news sources about this topic. Return ONLY a JSON array:\n\n"${query}"`;
+    // Send search request
+    const userMessage = `Find ${limit} reliable, recent news sources about this topic:\n\n"${query}"`;
 
     const formData = new URLSearchParams();
     formData.append("content", userMessage);
@@ -173,36 +174,39 @@ export async function searchWithAI(query: string, limit = 5): Promise<Source[]> 
 
     if (!msgRes.ok) {
       const errText = await msgRes.text();
-      console.error(`[Search-AI] Message failed: ${msgRes.status} - ${errText}`);
-      
-      // Fallback: try with GPT-4o-mini (cheaper, no web search but can use knowledge)
+      console.error(`[Search-AI] Perplexity failed: ${msgRes.status} - ${errText}`);
+
+      // Fallback: try GPT-4o-mini (no web search but can use knowledge)
       console.log(`[Search-AI] Falling back to GPT-4o-mini…`);
-      const fallbackData = new URLSearchParams();
-      fallbackData.append("content", userMessage);
-      fallbackData.append("stream", "false");
-      fallbackData.append("memory", "Off");
-      fallbackData.append("llm_provider", "openai");
-      fallbackData.append("model_name", "gpt-4o-mini");
-
-      const fallbackRes = await fetch(`${BB_URL}/threads/${threadId}/messages`, {
-        method: "POST",
-        headers: bbHeaders("application/x-www-form-urlencoded"),
-        body: fallbackData.toString(),
-      });
-
-      if (!fallbackRes.ok) {
-        const err = await fallbackRes.text();
-        throw new Error(`Fallback search also failed: ${fallbackRes.status} - ${err}`);
-      }
-
-      const fallbackResp = (await fallbackRes.json()) as any;
-      return parseSourcesFromAI(fallbackResp.content || "");
+      return await searchWithGPTFallback(threadId, query, limit);
     }
 
     const resp = (await msgRes.json()) as any;
     const content = resp.content || resp.message?.content || "";
 
-    return parseSourcesFromAI(content);
+    console.log(`[Search-AI] Perplexity response (${content.length} chars): ${content.slice(0, 300)}…`);
+
+    // ── Step 2: Parse the Perplexity response ──
+    const sources = parsePerplexityResponse(content);
+
+    if (sources.length > 0) {
+      console.log(`[Search-AI] ✅ Parsed ${sources.length} source(s) from Perplexity`);
+      return sources;
+    }
+
+    // If structured parsing found nothing, try JSON parsing
+    console.log(`[Search-AI] Structured parsing found 0 sources, trying JSON…`);
+    const jsonSources = tryParseJSON(content);
+    if (jsonSources.length > 0) {
+      console.log(`[Search-AI] ✅ Parsed ${jsonSources.length} source(s) from JSON`);
+      return jsonSources;
+    }
+
+    // Last resort: extract URLs with surrounding context
+    const urlSources = extractURLsWithContext(content);
+    console.log(`[Search-AI] Extracted ${urlSources.length} source(s) from URL extraction`);
+    return urlSources;
+
   } catch (err: any) {
     console.error(`[Search-AI] Error:`, err.message);
     return [];
@@ -210,16 +214,139 @@ export async function searchWithAI(query: string, limit = 5): Promise<Source[]> 
 }
 
 /**
- * Parse AI response into Source[] objects.
- * Handles JSON arrays, markdown code blocks, and inline citations.
+ * Fallback search using GPT-4o-mini when Perplexity is unavailable.
  */
-function parseSourcesFromAI(content: string): Source[] {
-  if (!content || content.length < 10) {
-    console.warn("[Search-AI] Empty response");
-    return [];
+async function searchWithGPTFallback(threadId: string, query: string, limit: number): Promise<Source[]> {
+  const userMessage = `Find ${limit} reliable, recent news sources about this topic:\n\n"${query}"`;
+  const fallbackData = new URLSearchParams();
+  fallbackData.append("content", userMessage);
+  fallbackData.append("stream", "false");
+  fallbackData.append("memory", "Off");
+  fallbackData.append("llm_provider", "openai");
+  fallbackData.append("model_name", "gpt-4o-mini");
+
+  const fallbackRes = await fetch(`${BB_URL}/threads/${threadId}/messages`, {
+    method: "POST",
+    headers: bbHeaders("application/x-www-form-urlencoded"),
+    body: fallbackData.toString(),
+  });
+
+  if (!fallbackRes.ok) {
+    const err = await fallbackRes.text();
+    throw new Error(`GPT fallback search also failed: ${fallbackRes.status} - ${err}`);
   }
 
-  console.log(`[Search-AI] Parsing response (${content.length} chars)…`);
+  const fallbackResp = (await fallbackRes.json()) as any;
+  const content = fallbackResp.content || "";
+  const sources = tryParseJSON(content);
+  if (sources.length > 0) return sources;
+  return extractURLsWithContext(content);
+}
+
+/**
+ * Parse Perplexity's structured SOURCE: lines.
+ * Format: SOURCE: title | url | snippet | date
+ */
+function parsePerplexityResponse(content: string): Source[] {
+  if (!content || content.length < 10) return [];
+
+  const sources: Source[] = [];
+  const seenUrls = new Set<string>();
+
+  // Method 1: Parse "SOURCE:" lines
+  const sourceLineRegex = /SOURCE:\s*(.+)/gi;
+  let match;
+  while ((match = sourceLineRegex.exec(content)) !== null) {
+    const line = match[1].trim();
+    const parts = line.split("|").map(p => p.trim());
+
+    if (parts.length >= 2) {
+      const title = parts[0];
+      const url = (parts[1] || "").replace(/[<>]/g, "");
+      const snippet = parts[2] || "";
+      const date = parts[3] || new Date().toISOString().split("T")[0];
+
+      if (url && url.startsWith("http") && !seenUrls.has(url)) {
+        seenUrls.add(url);
+        let hostname = "";
+        try { hostname = new URL(url).hostname.replace(/^www\./, ""); } catch { hostname = "unknown"; }
+        sources.push({
+          title: title || `Source from ${hostname}`,
+          url,
+          domain: hostname,
+          date,
+          credibilityScore: credibilityForDomain(hostname),
+          snippet,
+        });
+      }
+    }
+  }
+
+  if (sources.length > 0) return sources;
+
+  // Method 2: Parse numbered list with URLs (e.g., "1. **Title** - snippet [URL]")
+  const numberedRegex = /\d+\.\s*\*?\*?(.+?)\*?\*?\s*[-–—]\s*(.*?)(?:\[([^\]]+)\]|\((https?:\/\/[^\s\)]+)\))/g;
+  while ((match = numberedRegex.exec(content)) !== null) {
+    const title = match[1].trim().replace(/\*+/g, "");
+    const snippet = match[2].trim();
+    const url = (match[3] || match[4] || "").trim();
+
+    if (url && url.startsWith("http") && !seenUrls.has(url)) {
+      seenUrls.add(url);
+      let hostname = "";
+      try { hostname = new URL(url).hostname.replace(/^www\./, ""); } catch { hostname = "unknown"; }
+      sources.push({
+        title: title || `Source from ${hostname}`,
+        url,
+        domain: hostname,
+        date: new Date().toISOString().split("T")[0],
+        credibilityScore: credibilityForDomain(hostname),
+        snippet,
+      });
+    }
+  }
+
+  if (sources.length > 0) return sources;
+
+  // Method 3: Parse markdown links with context
+  // Matches: [Title](URL) or [text](url) patterns with surrounding text as snippet
+  const mdLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g;
+  const lines = content.split("\n");
+
+  for (const line of lines) {
+    mdLinkRegex.lastIndex = 0;
+    while ((match = mdLinkRegex.exec(line)) !== null) {
+      const title = match[1].trim();
+      const url = match[2].trim();
+
+      if (!seenUrls.has(url) && !url.includes("favicon")) {
+        seenUrls.add(url);
+        let hostname = "";
+        try { hostname = new URL(url).hostname.replace(/^www\./, ""); } catch { hostname = "unknown"; }
+
+        // Use the full line (minus the link) as snippet
+        const snippet = line.replace(match[0], "").replace(/^\s*[-*\d.]+\s*/, "").trim();
+
+        sources.push({
+          title: title.length > 5 ? title : `Article from ${hostname}`,
+          url,
+          domain: hostname,
+          date: new Date().toISOString().split("T")[0],
+          credibilityScore: credibilityForDomain(hostname),
+          snippet: snippet.length > 10 ? snippet : "",
+        });
+      }
+    }
+  }
+
+  return sources;
+}
+
+/**
+ * Try to parse a JSON array of source objects from the response.
+ */
+function tryParseJSON(content: string): Source[] {
+  if (!content) return [];
 
   let text = content.trim();
 
@@ -228,48 +355,46 @@ function parseSourcesFromAI(content: string): Source[] {
     text = text.replace(/```(?:json)?\n?/g, "").replace(/```\s*$/g, "").trim();
   }
 
-  // Try to find JSON array
   const firstBracket = text.indexOf("[");
   const lastBracket = text.lastIndexOf("]");
 
-  if (firstBracket !== -1 && lastBracket > firstBracket) {
-    try {
-      let jsonStr = text.substring(firstBracket, lastBracket + 1);
-      // Fix Python-style escapes
-      jsonStr = jsonStr
-        .replace(/\\'/g, "'")
-        .replace(/,\s*]/g, "]")
-        .replace(/,\s*}/g, "}");
-      
-      const parsed = JSON.parse(jsonStr) as any[];
-      const sources = parsed
-        .filter((s: any) => s.url && s.title)
-        .map((s: any): Source => {
-          let hostname = "";
-          try {
-            hostname = new URL(s.url).hostname.replace(/^www\./, "");
-          } catch {
-            hostname = s.domain || "unknown";
-          }
-          return {
-            title: s.title,
-            url: s.url,
-            domain: hostname,
-            date: s.date || new Date().toISOString().split("T")[0],
-            credibilityScore: credibilityForDomain(hostname),
-            snippet: s.snippet || s.description || "",
-          };
-        });
+  if (firstBracket === -1 || lastBracket <= firstBracket) return [];
 
-      console.log(`[Search-AI] ✅ Parsed ${sources.length} source(s) from JSON`);
-      return sources;
-    } catch (e: any) {
-      console.warn(`[Search-AI] JSON parse failed:`, e.message);
-    }
+  try {
+    let jsonStr = text.substring(firstBracket, lastBracket + 1);
+    jsonStr = jsonStr
+      .replace(/\\'/g, "'")
+      .replace(/,\s*]/g, "]")
+      .replace(/,\s*}/g, "}");
+
+    const parsed = JSON.parse(jsonStr) as any[];
+    return parsed
+      .filter((s: any) => s.url && s.title)
+      .map((s: any): Source => {
+        let hostname = "";
+        try { hostname = new URL(s.url).hostname.replace(/^www\./, ""); } catch { hostname = s.domain || "unknown"; }
+        return {
+          title: s.title,
+          url: s.url,
+          domain: hostname,
+          date: s.date || new Date().toISOString().split("T")[0],
+          credibilityScore: credibilityForDomain(hostname),
+          snippet: s.snippet || s.description || "",
+        };
+      });
+  } catch {
+    return [];
   }
+}
 
-  // Fallback: extract URLs from plain text using regex
-  const urlRegex = /https?:\/\/[^\s\)\"'<>]+/g;
+/**
+ * Last-resort: extract URLs from plain text with surrounding context for titles/snippets.
+ * Much smarter than the old "Source from domain.com" fallback.
+ */
+function extractURLsWithContext(content: string): Source[] {
+  if (!content) return [];
+
+  const urlRegex = /https?:\/\/[^\s\)\"'<>\]]+/g;
   const urls = content.match(urlRegex) || [];
   const sources: Source[] = [];
   const seenDomains = new Set<string>();
@@ -280,20 +405,46 @@ function parseSourcesFromAI(content: string): Source[] {
       if (seenDomains.has(hostname)) continue;
       seenDomains.add(hostname);
 
+      // Try to find a title near the URL in the content
+      const urlIdx = content.indexOf(url);
+      const contextBefore = content.substring(Math.max(0, urlIdx - 200), urlIdx);
+      const contextAfter = content.substring(urlIdx + url.length, Math.min(content.length, urlIdx + url.length + 200));
+
+      // Look for a title: text in quotes, bold, or the preceding sentence
+      let title = "";
+      const titleFromBold = contextBefore.match(/\*\*([^*]+)\*\*\s*$/);
+      const titleFromQuotes = contextBefore.match(/"([^"]+)"\s*$/);
+      const titleFromLine = contextBefore.split("\n").pop()?.replace(/^\s*[-*\d.]+\s*/, "").trim();
+
+      if (titleFromBold) title = titleFromBold[1];
+      else if (titleFromQuotes) title = titleFromQuotes[1];
+      else if (titleFromLine && titleFromLine.length > 10 && titleFromLine.length < 200) title = titleFromLine;
+      else title = `Article from ${hostname}`;
+
+      // Clean title from url and brackets
+      title = title.replace(/\[|\]/g, "").replace(url, "").trim();
+      if (title.length < 5) title = `Article from ${hostname}`;
+
+      // Extract snippet from context after URL
+      const snippet = contextAfter
+        .split("\n")[0]
+        ?.replace(/^\s*[-–|:]\s*/, "")
+        .trim()
+        .slice(0, 200) || "";
+
       sources.push({
-        title: `Source from ${hostname}`,
+        title,
         url,
         domain: hostname,
         date: new Date().toISOString().split("T")[0],
         credibilityScore: credibilityForDomain(hostname),
-        snippet: "",
+        snippet,
       });
     } catch {
       // Invalid URL, skip
     }
   }
 
-  console.log(`[Search-AI] Extracted ${sources.length} source(s) from URLs in text`);
   return sources;
 }
 
@@ -360,15 +511,16 @@ export async function searchSources(query: string, limit = 5): Promise<Source[]>
 export async function searchCombined(query: string, limit = 5): Promise<Source[]> {
   // Try AI search first (no Google API needed)
   let sources = await searchWithAI(query, limit);
-  
+
   if (sources.length >= 2) {
+    console.log(`[Search] ✅ Perplexity returned ${sources.length} source(s) — using them`);
     return sources;
   }
-  
+
   // Fallback to Google (if configured)
-  console.log(`[Search] AI search returned ${sources.length} result(s), trying Google…`);
+  console.log(`[Search] Perplexity returned ${sources.length} result(s), trying Google fallback…`);
   const googleSources = await searchSources(query, limit);
-  
+
   // Merge and deduplicate
   const seenUrls = new Set(sources.map(s => s.url));
   for (const gs of googleSources) {
@@ -377,7 +529,8 @@ export async function searchCombined(query: string, limit = 5): Promise<Source[]
       sources.push(gs);
     }
   }
-  
+
+  console.log(`[Search] Combined total: ${sources.length} source(s)`);
   return sources;
 }
 

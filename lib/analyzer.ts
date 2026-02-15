@@ -5,7 +5,7 @@
 // ──────────────────────────────────────────────
 
 import { extractTextFromImage } from "./geminiOcr";
-import { extractClaims, verifyClaimMultiModel, ModelVerification } from "./backboardHttp";
+import { extractClaims, verifyClaimMultiModel, ModelVerification, generateOCRSummary } from "./backboardHttp";
 import { searchCombined } from "./search";
 import { detectBias } from "./biasDetection";
 import { calculateTrustScore, biasPenalty, trustLabel } from "./trustScore";
@@ -41,19 +41,20 @@ export async function analyzeImage(
   }
   console.log(`[Orchestrator][${jobId}] ✅ OCR extracted ${ocrText.length} chars`);
 
-  // ── Step 2: Extract Claims + Search Sources (parallel, ~3s) ──
-  console.log(`[Orchestrator][${jobId}] Step 2: Extracting claims and searching sources (parallel)…`);
+  // ── Step 2: Extract Claims + Search Sources + OCR Summary (all parallel, ~3s) ──
+  console.log(`[Orchestrator][${jobId}] Step 2: Extracting claims, searching sources, and generating summary (parallel)…`);
   
   let extractedClaims: Array<{ text: string }> = [];
   let sources: Source[] = [];
+  let ocrSummary: string = "";
   
   try {
     // Extract first meaningful sentence for initial search
     const sentences = ocrText.split(/[.!?\n]/).map(s => s.trim()).filter(s => s.length > 15);
     const primaryQuery = sentences[0] || ocrText.slice(0, 200);
     
-    // Run claim extraction + AI-powered search in parallel
-    const [claimsResult, primarySources] = await Promise.all([
+    // Run claim extraction + AI-powered search + OCR summary — ALL in parallel
+    const [claimsResult, primarySources, summaryResult] = await Promise.all([
       extractClaims(ocrText).catch((err: any) => {
         console.warn(`[Orchestrator][${jobId}] Claim extraction failed:`, err.message);
         const firstSentence = sentences[0];
@@ -66,10 +67,17 @@ export async function analyzeImage(
         console.warn(`[Orchestrator][${jobId}] Primary search failed:`, err.message);
         return [];
       }),
+      // Generate OCR-based summary (describes what the screenshot says)
+      generateOCRSummary(ocrText).catch((err: any) => {
+        console.warn(`[Orchestrator][${jobId}] OCR summary failed:`, err.message);
+        // Fallback: use first 2 sentences of OCR text
+        return sentences.slice(0, 2).join(". ") + (sentences.length > 0 ? "." : "");
+      }),
     ]);
     
     extractedClaims = claimsResult;
     sources = primarySources;
+    ocrSummary = summaryResult;
     
     // If primary search returned few results, run additional searches using extracted claims
     if (sources.length < 3 && extractedClaims.length > 0) {
@@ -133,7 +141,9 @@ export async function analyzeImage(
       })),
       aggregateTrustScore: 0,
       trustLabel: "Unable to Verify",
-      summary: `Unable to verify claims: No web sources found. Ensure BACKBOARD_API_KEY is set in Vercel environment variables for AI-powered search.`,
+      summary: ocrSummary && ocrSummary.length > 10
+        ? `${ocrSummary} — Unable to verify: no web sources found.`
+        : `Unable to verify claims: No web sources found. Ensure BACKBOARD_API_KEY is set in Vercel environment variables.`,
       generatedAt: new Date().toISOString(),
     };
     
@@ -242,8 +252,8 @@ export async function analyzeImage(
     ? Math.round(claims.reduce((s, c) => s + c.trustScore, 0) / claims.length)
     : 0;
   
-  // Generate summary
-  const summary = generateSummary(claims, biasSignals, sources.length);
+  // Generate summary — starts with OCR-based description of what the screenshot says
+  const summary = generateSummary(claims, biasSignals, sources.length, ocrSummary);
 
   console.log(`[Orchestrator][${jobId}] ✅ Synthesis complete — trust: ${aggScore}%, ${claims.length} claim(s)`);
 
@@ -265,15 +275,22 @@ export async function analyzeImage(
 function generateSummary(
   claims: Claim[],
   biasSignals: any,
-  sourceCount: number
+  sourceCount: number,
+  ocrSummary: string
 ): string {
+  // The summary starts with what the screenshot actually says (OCR-based)
+  // so users can gauge how well the OCR read the text.
+  const contentDescription = ocrSummary && ocrSummary.length > 10
+    ? ocrSummary
+    : claims.map(c => c.text).join("; ");
+
   const mainVerdict = claims[0]?.verdict || "mixed";
   const verdictDesc = mainVerdict === "likely_true" ? "likely true"
     : mainVerdict === "likely_misleading" ? "likely misleading"
     : "unverified";
-  
+
   const biasDesc = biasSignals.overallBias === "center" ? "relatively neutral"
     : biasSignals.overallBias.replace("_", " ");
-  
-  return `Analysis of ${claims.length} claim(s) suggests the content is ${verdictDesc}. Assessed across ${sourceCount} source(s) and verified by multiple AI models. Bias assessment: ${biasDesc} framing.`;
+
+  return `${contentDescription} — Verdict: ${verdictDesc} (${sourceCount} source(s), ${biasDesc} framing).`;
 }
