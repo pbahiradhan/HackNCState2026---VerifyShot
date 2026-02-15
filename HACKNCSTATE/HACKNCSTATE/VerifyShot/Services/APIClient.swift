@@ -71,6 +71,23 @@ final class APIClient {
         return resp.reply
     }
 
+    // MARK: - Bias Analysis
+
+    func analyzeBias(
+        jobId: String,
+        ocrText: String,
+        claims: [String]
+    ) async throws -> BiasAnalysisResult {
+        let body: [String: Any] = [
+            "jobId": jobId,
+            "ocrText": ocrText,
+            "claims": claims
+        ]
+        let data = try await post(path: "/api/bias/analyze", body: body)
+        let result = try JSONDecoder().decode(BiasAnalysisResult.self, from: data)
+        return result
+    }
+
     // MARK: - Health Check
 
     func healthCheck() async -> String {

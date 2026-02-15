@@ -16,23 +16,46 @@ export interface BiasSignals {
   sensationalism: number;      // 0-1
   overallBias: "left" | "slight_left" | "center" | "slight_right" | "right";
   explanation: string;
+  // New fields for multi-perspective bias detection
+  confidence?: number;         // 0-1 (inverse of std dev across all assessments)
+  agreement?: "high" | "medium" | "low";  // How much the assessments agree
+  perspectives?: {
+    usLeft: {
+      bias: number;
+      sensationalism: number;
+      consensus: number;  // average of 3 models
+    };
+    usRight: {
+      bias: number;
+      sensationalism: number;
+      consensus: number;
+    };
+    international: {
+      bias: number;
+      sensationalism: number;
+      consensus: number;
+    };
+  };
+  keySignals?: string[];      // Common themes detected
 }
 
 export interface ModelVerdict {
-  modelName: string;           // e.g. "GPT-4", "Claude 3", "Gemini"
+  modelName: string;           // e.g. "GPT-4o", "Claude 3.5 Sonnet", "Gemini 1.5 Pro"
   agrees: boolean;
   confidence: number;          // 0-1
+  verdict?: "likely_true" | "mixed" | "likely_misleading";  // Real verdict from this model
+  reasoning?: string;           // Model's explanation
 }
 
 export interface Claim {
   id: string;
   text: string;
-  verdict: "likely_true" | "mixed" | "likely_misleading";
+  verdict: "likely_true" | "mixed" | "likely_misleading" | "unable_to_verify";
   trustScore: number;          // 0-100
   explanation: string;
   sources: Source[];
   biasSignals: BiasSignals;
-  modelVerdicts: ModelVerdict[];
+  modelVerdicts: ModelVerdict[];  // Real multi-model consensus (not fake)
 }
 
 export interface AnalysisResult {
@@ -57,4 +80,39 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   sources?: Source[];
+}
+
+// ──────────────────────────────────────────────
+//  Bias Analysis (separate from main analysis)
+// ──────────────────────────────────────────────
+
+export interface ModelBiasUpdate {
+  perspective: "us-left" | "us-right" | "international";
+  modelName: string;
+  status: "thinking" | "analyzing" | "complete";
+  reasoning?: string;
+  bias?: number;
+  sensationalism?: number;
+}
+
+export interface BiasAnalysisResult {
+  biasSignals: BiasSignals;
+  modelAssessments: ModelBiasUpdate[];
+  perspectives?: {
+    usLeft: {
+      bias: number;
+      sensationalism: number;
+      consensus: number;
+    };
+    usRight: {
+      bias: number;
+      sensationalism: number;
+      consensus: number;
+    };
+    international: {
+      bias: number;
+      sensationalism: number;
+      consensus: number;
+    };
+  };
 }

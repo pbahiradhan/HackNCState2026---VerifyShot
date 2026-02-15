@@ -17,7 +17,7 @@ struct AnalysisResult: Codable, Identifiable {
 struct Claim: Codable, Identifiable {
     let id: String
     let text: String
-    let verdict: String          // "likely_true" | "mixed" | "likely_misleading"
+    let verdict: String          // "likely_true" | "mixed" | "likely_misleading" | "unable_to_verify"
     let trustScore: Int
     let explanation: String
     let sources: [Source]
@@ -40,6 +40,23 @@ struct BiasSignals: Codable {
     let sensationalism: Double   // 0 to 1
     let overallBias: String      // "left"|"slight_left"|"center"|"slight_right"|"right"
     let explanation: String
+    // New fields for multi-perspective bias detection
+    let confidence: Double?      // 0-1 (inverse of std dev)
+    let agreement: String?      // "high"|"medium"|"low"
+    let perspectives: BiasPerspectives?
+    let keySignals: [String]?
+}
+
+struct BiasPerspectives: Codable {
+    let usLeft: BiasPerspective
+    let usRight: BiasPerspective
+    let international: BiasPerspective
+}
+
+struct BiasPerspective: Codable {
+    let bias: Double
+    let sensationalism: Double
+    let consensus: Double
 }
 
 struct ModelVerdict: Codable, Identifiable {
@@ -47,6 +64,8 @@ struct ModelVerdict: Codable, Identifiable {
     let modelName: String
     let agrees: Bool
     let confidence: Double
+    let verdict: String?        // "likely_true" | "mixed" | "likely_misleading"
+    let reasoning: String?       // Model's explanation
 }
 
 // MARK: - Chat
@@ -68,4 +87,22 @@ struct ChatResponse: Codable {
 struct UploadResponse: Codable {
     let imageUrl: String
     let jobId: String
+}
+
+// MARK: - Bias Analysis
+
+struct ModelBiasUpdate: Identifiable, Codable {
+    var id: String { "\(perspective)-\(modelName)-\(status)" }  // Must include status for uniqueness
+    let perspective: String  // "us-left" | "us-right" | "international"
+    let modelName: String
+    let status: String       // "thinking" | "analyzing" | "complete"
+    let reasoning: String?
+    let bias: Double?
+    let sensationalism: Double?
+}
+
+struct BiasAnalysisResult: Codable {
+    let biasSignals: BiasSignals
+    let modelAssessments: [ModelBiasUpdate]
+    let perspectives: BiasPerspectives?
 }

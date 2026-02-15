@@ -6,8 +6,9 @@ import { Source, BiasSignals } from "./types";
 
 export function calculateTrustScore(
   sources: Source[],
-  modelConsensus: number,     // 0-1 (LLM confidence)
-  biasPenalty: number          // 0-1
+  modelConsensus: number,     // 0-1 (average LLM confidence)
+  biasPenalty: number,        // 0-1
+  modelAgreement?: number      // 0-1 (fraction of models that agree, optional)
 ): number {
   // 1. Source quality (0-1) — weighted avg credibility
   const sourceQuality = sources.length > 0
@@ -21,9 +22,12 @@ export function calculateTrustScore(
   const highQ = sources.filter((s) => (s.credibilityScore || 0) >= 0.7).length;
   const agreement = sources.length > 0 ? highQ / sources.length : 0.3; // Default if no sources
 
+  // Model agreement boost (if provided)
+  const agreementBoost = modelAgreement !== undefined ? modelAgreement * 0.1 : 0;
+  
   // Weighted formula
   // If no sources, rely more heavily on model consensus
-  const sourceWeight = sources.length > 0 ? 0.45 : 0.20;
+  const sourceWeight = sources.length > 0 ? 0.40 : 0.20;
   const modelWeight = sources.length > 0 ? 0.30 : 0.50; // Higher weight when no sources
   const recencyWeight = sources.length > 0 ? 0.10 : 0.05;
   const agreementWeight = sources.length > 0 ? 0.10 : 0.05;
@@ -32,7 +36,8 @@ export function calculateTrustScore(
     sourceWeight * sourceQuality +
     modelWeight * modelConsensus +
     recencyWeight * recency +
-    agreementWeight * agreement -
+    agreementWeight * agreement +
+    agreementBoost -  // Boost for model agreement
     0.05 * biasPenalty;
 
   const finalScore = Math.max(0, Math.min(100, Math.round(raw * 100)));

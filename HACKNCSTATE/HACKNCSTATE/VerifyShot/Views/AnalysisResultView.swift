@@ -27,9 +27,15 @@ struct AnalysisResultView: View {
                         Text(result.trustLabel)
                             .font(.title.bold())
                             .foregroundColor(.vsNavy)
-                        Text("Based on consensus from \(result.claims.first?.modelVerdicts.count ?? 3) AI models")
-                            .font(.subheadline)
-                            .foregroundColor(.vsDarkGray)
+                        if let firstClaim = result.claims.first, !firstClaim.modelVerdicts.isEmpty {
+                            Text("Based on consensus from \(firstClaim.modelVerdicts.count) AI models")
+                                .font(.subheadline)
+                                .foregroundColor(.vsDarkGray)
+                        } else if result.trustLabel == "Unable to Verify" {
+                            Text("Insufficient high-quality sources found")
+                                .font(.subheadline)
+                                .foregroundColor(.vsDarkGray)
+                        }
                     }
 
                     // ── Section 4: Quick Summary ──
@@ -263,35 +269,69 @@ struct AnalysisResultView: View {
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
-        HStack(spacing: 16) {
+        VStack(spacing: 12) {
+            // First row: Ask AI + Deep Research
+            HStack(spacing: 16) {
+                Button {
+                    appState.enterChatFromResults()
+                } label: {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                        Text("Ask AI")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.vsNavy)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+
+                Button {
+                    appState.isDeepResearchMode = true
+                    appState.enterChatFromResults()
+                } label: {
+                    HStack {
+                        Image(systemName: "sparkle.magnifyingglass")
+                        Text("Deep Research")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.vsNavy)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.vsGray)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+            }
+            
+            // Second row: Bias Analysis (full width)
             Button {
-                appState.enterChatFromResults()
+                appState.showBiasAnalysis = true
+                // Trigger bias analysis if not already done
+                if appState.biasAnalysisResult == nil, let result = appState.analysisResult {
+                    let claims = result.claims.map { $0.text }
+                    appState.analyzeBias(
+                        jobId: result.jobId,
+                        ocrText: result.ocrText,
+                        claims: claims
+                    )
+                }
             } label: {
                 HStack {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                    Text("Ask AI")
+                    Image(systemName: "chart.bar.xaxis")
+                    Text("Bias Analysis")
                 }
                 .font(.headline)
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color.vsNavy)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-
-            Button {
-                appState.isDeepResearchMode = true
-                appState.enterChatFromResults()
-            } label: {
-                HStack {
-                    Image(systemName: "sparkle.magnifyingglass")
-                    Text("Deep Research")
-                }
-                .font(.headline)
-                .foregroundColor(.vsNavy)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(Color.vsGray)
+                .background(
+                    LinearGradient(
+                        colors: [.vsOrange, .vsOrange.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         }
@@ -310,6 +350,7 @@ struct AnalysisResultView: View {
         switch verdict {
         case "likely_true": return "checkmark.circle.fill"
         case "likely_misleading": return "exclamationmark.triangle.fill"
+        case "unable_to_verify": return "questionmark.circle.fill"
         default: return "questionmark.circle.fill"
         }
     }
@@ -318,6 +359,7 @@ struct AnalysisResultView: View {
         switch verdict {
         case "likely_true": return .vsGreen
         case "likely_misleading": return .vsOrange
+        case "unable_to_verify": return .gray
         default: return .vsYellow
         }
     }
@@ -326,6 +368,7 @@ struct AnalysisResultView: View {
         switch verdict {
         case "likely_true": return "Likely True"
         case "likely_misleading": return "Misleading"
+        case "unable_to_verify": return "Unable to Verify"
         default: return "Mixed"
         }
     }

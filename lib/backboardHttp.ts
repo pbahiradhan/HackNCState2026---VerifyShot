@@ -498,3 +498,213 @@ export async function chatAboutJob(
 
   return resp.content || "I couldn't generate a response. Please try again.";
 }
+
+// ──────────────────────────────────────────────
+//  Claim Extraction (fast, using GPT-4o-mini)
+// ──────────────────────────────────────────────
+
+export interface ExtractedClaim {
+  text: string;
+}
+
+export async function extractClaims(ocrText: string): Promise<ExtractedClaim[]> {
+  const systemPrompt = [
+    "You are a claim extraction API.",
+    "Extract 1-3 factual claims from the provided text.",
+    "Return ONLY a JSON array of claim objects.",
+    "Each claim object has one key: \"text\" (string).",
+    "No markdown, no code blocks, no explanation.",
+    "Example format: [{\"text\": \"claim 1\"}, {\"text\": \"claim 2\"}]",
+    "Start with [ and end with ]. Nothing else.",
+  ].join("\n");
+
+  const assistantId = await getOrCreateAssistant("VerifyShot-ClaimExtractor-v1", systemPrompt);
+
+  const threadRes = await fetch(`${BASE_URL}/assistants/${assistantId}/threads`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({}),
+  });
+
+  if (!threadRes.ok) {
+    const errorText = await threadRes.text();
+    throw new Error(`Failed to create thread: ${threadRes.status} - ${errorText}`);
+  }
+
+  const thread = (await threadRes.json()) as any;
+  const threadId = thread.thread_id;
+
+  const userMessage = `Extract factual claims from this text:\n\n${ocrText.slice(0, 2000)}`;
+
+  const formData = new URLSearchParams();
+  formData.append("content", userMessage);
+  formData.append("stream", "false");
+  formData.append("memory", "Off");
+  formData.append("llm_provider", "openai");
+  formData.append("model_name", "gpt-4o-mini");  // Fast and cheap for extraction
+
+  const messageRes = await fetch(`${BASE_URL}/threads/${threadId}/messages`, {
+    method: "POST",
+    headers: getHeaders("application/x-www-form-urlencoded"),
+    body: formData.toString(),
+  });
+
+  if (!messageRes.ok) {
+    const errorText = await messageRes.text();
+    throw new Error(`Failed to send message: ${messageRes.status} - ${errorText}`);
+  }
+
+  const resp = (await messageRes.json()) as any;
+  let content = resp.content || resp.message?.content || "";
+  
+  // Parse JSON array
+  content = content.trim();
+  if (content.startsWith("```")) {
+    content = content.replace(/```(?:json)?\n?/g, "").replace(/```\s*$/g, "").trim();
+  }
+
+  const firstBracket = content.indexOf("[");
+  const lastBracket = content.lastIndexOf("]");
+  
+  if (firstBracket === -1 || lastBracket === -1) {
+    throw new Error(`Failed to extract claims: no JSON array found. Content: ${content.slice(0, 200)}`);
+  }
+
+  const jsonStr = content.substring(firstBracket, lastBracket + 1);
+  const parsed = JSON.parse(jsonStr) as any[];
+
+  return parsed.map((c: any) => ({
+    text: c.text || String(c),
+  })).filter((c) => c.text && c.text.length > 10);
+}
+
+// ──────────────────────────────────────────────
+//  Multi-Model Verification (3 models in parallel)
+// ──────────────────────────────────────────────
+
+export interface ModelVerification {
+  modelName: string;
+  modelProvider: string;
+  verdict: "likely_true" | "mixed" | "likely_misleading";
+  confidence: number;
+  reasoning: string;
+}
+
+export async function verifyClaimMultiModel(
+  claimText: string,
+  sources: Source[]
+): Promise<ModelVerification[]> {
+  const srcBlock = sources.length > 0
+    ? sources.map((s, i) => `[${i + 1}] ${s.title} (${s.domain}): ${s.snippet}`).join("\n")
+    : "No sources available.";
+
+  const systemPrompt = [
+    "You are a fact-checking API.",
+    "Analyze the claim against the provided sources.",
+    "Return ONLY a JSON object with:",
+    "- \"verdict\" (string): one of \"likely_true\", \"mixed\", or \"likely_misleading\"",
+    "- \"confidence\" (number): decimal between 0.0 and 1.0",
+    "- \"reasoning\" (string): 2-3 sentences explaining your verdict",
+    "Verdict rules:",
+    "- \"likely_true\": confidence 0.7-1.0, claim is supported by credible sources",
+    "- \"mixed\": confidence 0.4-0.7, conflicting or insufficient evidence",
+    "- \"likely_misleading\": confidence 0.0-0.4, contradicts sources or lacks evidence",
+    "Use REAL confidence values based on evidence. Do NOT default to 0.5.",
+    "Start with { and end with }. Nothing else.",
+  ].join("\n");
+
+  const userMessage = `CLAIM TO VERIFY:
+"${claimText}"
+
+SOURCES:
+${srcBlock}
+
+Analyze this claim against the sources. Return your verdict as JSON.`;
+
+  // Run 3 models in parallel
+  const models = [
+    { provider: "openai", name: "gpt-4o", displayName: "GPT-4o" },
+    { provider: "anthropic", name: "claude-3-5-sonnet-20241022", displayName: "Claude 3.5 Sonnet" },
+    { provider: "google", name: "gemini-1.5-pro", displayName: "Gemini 1.5 Pro" },
+  ];
+
+  const verifications = await Promise.all(
+    models.map(async (model) => {
+      try {
+        const assistantId = await getOrCreateAssistant(
+          `VerifyShot-Verifier-${model.displayName.replace(/\s+/g, "-")}-v1`,
+          systemPrompt
+        );
+
+        const threadRes = await fetch(`${BASE_URL}/assistants/${assistantId}/threads`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({}),
+        });
+
+        if (!threadRes.ok) {
+          throw new Error(`Thread creation failed: ${threadRes.status}`);
+        }
+
+        const thread = (await threadRes.json()) as any;
+        const threadId = thread.thread_id;
+
+        const formData = new URLSearchParams();
+        formData.append("content", userMessage);
+        formData.append("stream", "false");
+        formData.append("memory", "Off");
+        formData.append("llm_provider", model.provider);
+        formData.append("model_name", model.name);
+
+        const messageRes = await fetch(`${BASE_URL}/threads/${threadId}/messages`, {
+          method: "POST",
+          headers: getHeaders("application/x-www-form-urlencoded"),
+          body: formData.toString(),
+        });
+
+        if (!messageRes.ok) {
+          const errorText = await messageRes.text();
+          throw new Error(`Message failed: ${messageRes.status} - ${errorText}`);
+        }
+
+        const resp = (await messageRes.json()) as any;
+        let content = resp.content || resp.message?.content || "";
+        
+        content = content.trim();
+        if (content.startsWith("```")) {
+          content = content.replace(/```(?:json)?\n?/g, "").replace(/```\s*$/g, "").trim();
+        }
+
+        const firstBrace = content.indexOf("{");
+        const lastBrace = content.lastIndexOf("}");
+        
+        if (firstBrace === -1 || lastBrace === -1) {
+          throw new Error(`No JSON object found: ${content.slice(0, 200)}`);
+        }
+
+        const jsonStr = content.substring(firstBrace, lastBrace + 1);
+        const parsed = JSON.parse(jsonStr) as any;
+
+        return {
+          modelName: model.displayName,
+          modelProvider: model.provider,
+          verdict: (parsed.verdict || "mixed") as "likely_true" | "mixed" | "likely_misleading",
+          confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5)),
+          reasoning: parsed.reasoning || "Analysis completed.",
+        };
+      } catch (err: any) {
+        console.error(`[Backboard] Verification failed for ${model.displayName}:`, err.message);
+        // Return default on error
+        return {
+          modelName: model.displayName,
+          modelProvider: model.provider,
+          verdict: "mixed" as const,
+          confidence: 0.5,
+          reasoning: `Error: ${err.message}`,
+        };
+      }
+    })
+  );
+
+  return verifications;
+}
