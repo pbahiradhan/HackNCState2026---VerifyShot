@@ -335,117 +335,89 @@ Analyze this content and return the JSON response.`;
   
   // Now continue with the parsed object
   console.log("[Backboard] Parsed keys:", Object.keys(parsed));
-    console.log("[Backboard] Claims count:", parsed.claims?.length || 0);
-    
-    // Validate and log each claim
-    if (parsed.claims && parsed.claims.length > 0) {
-      parsed.claims.forEach((c: any, i: number) => {
-        console.log(`[Backboard] Claim ${i + 1}:`, {
-          text: c.text?.slice(0, 50) || "MISSING",
-          verdict: c.verdict || "MISSING",
-          confidence: c.confidence ?? "MISSING",
-          hasExplanation: !!c.explanation,
-        });
+  console.log("[Backboard] Claims count:", parsed.claims?.length || 0);
+  
+  // Validate and log each claim
+  if (parsed.claims && parsed.claims.length > 0) {
+    parsed.claims.forEach((c: any, i: number) => {
+      console.log(`[Backboard] Claim ${i + 1}:`, {
+        text: c.text?.slice(0, 50) || "MISSING",
+        verdict: c.verdict || "MISSING",
+        confidence: c.confidence ?? "MISSING",
+        hasExplanation: !!c.explanation,
       });
+    });
+  } else {
+    console.error("[Backboard] ⚠️ No claims found in parsed JSON!");
+  }
+  
+  console.log("[Backboard] Summary:", parsed.summary?.slice(0, 100) || "MISSING");
+  console.log("[Backboard] Bias assessment:", parsed.biasAssessment ? "Present" : "MISSING");
+  console.log("[Backboard] Model consensus:", parsed.modelConsensus?.length || 0);
+  
+  // Validate confidence values - they should NOT be 0.5 (default)
+  const claims = (parsed.claims || []).slice(0, 3).map((c: any, idx: number) => {
+    // Handle different confidence formats
+    let conf: number;
+    if (typeof c.confidence === "number") {
+      conf = c.confidence;
+    } else if (typeof c.confidence === "string") {
+      conf = parseFloat(c.confidence) || 0.5;
     } else {
-      console.error("[Backboard] ⚠️ No claims found in parsed JSON!");
+      conf = 0.5;
     }
     
-    console.log("[Backboard] Summary:", parsed.summary?.slice(0, 100) || "MISSING");
-    console.log("[Backboard] Bias assessment:", parsed.biasAssessment ? "Present" : "MISSING");
-    console.log("[Backboard] Model consensus:", parsed.modelConsensus?.length || 0);
-    
-    // Validate confidence values - they should NOT be 0.5 (default)
-    const claims = (parsed.claims || []).slice(0, 3).map((c: any, idx: number) => {
-      // Handle different confidence formats
-      let conf: number;
-      if (typeof c.confidence === "number") {
-        conf = c.confidence;
-      } else if (typeof c.confidence === "string") {
-        conf = parseFloat(c.confidence) || 0.5;
-      } else {
-        conf = 0.5;
-      }
-      
-      // Warn if using default
-      if (conf === 0.5) {
-        console.warn(`[Backboard] ⚠️ Claim ${idx + 1} has default confidence 0.5`);
-        console.warn(`[Backboard] Claim data:`, JSON.stringify(c).slice(0, 200));
-      } else {
-        console.log(`[Backboard] ✅ Claim ${idx + 1} confidence: ${conf}`);
-      }
-      
-      return {
-        text: c.text || `Claim ${idx + 1}`,
-        verdict: c.verdict || "mixed",
-        confidence: Math.max(0, Math.min(1, conf)),
-        explanation: c.explanation || "Analysis pending.",
-      };
-    });
-    
-    // Validate we got at least one claim
-    if (claims.length === 0) {
-      console.error("[Backboard] ❌ No claims extracted from response!");
-      console.error("[Backboard] Parsed object:", JSON.stringify(parsed).slice(0, 500));
-      throw new Error("Backboard returned no claims. Check the prompt and response format.");
+    // Warn if using default
+    if (conf === 0.5) {
+      console.warn(`[Backboard] ⚠️ Claim ${idx + 1} has default confidence 0.5`);
+      console.warn(`[Backboard] Claim data:`, JSON.stringify(c).slice(0, 200));
+    } else {
+      console.log(`[Backboard] ✅ Claim ${idx + 1} confidence: ${conf}`);
     }
-    
-    // Log final extracted data
-    console.log("[Backboard] ✅ Successfully extracted:", {
-      claimsCount: claims.length,
-      avgConfidence: (claims.reduce((sum: number, c: { confidence: number }) => sum + c.confidence, 0) / claims.length).toFixed(2),
-      hasSummary: !!parsed.summary,
-      hasBias: !!parsed.biasAssessment,
-      modelConsensusCount: parsed.modelConsensus?.length || 0,
-    });
     
     return {
-      claims,
-      biasAssessment: {
-        politicalBias: parsed.biasAssessment?.politicalBias ?? 0,
-        sensationalism: parsed.biasAssessment?.sensationalism ?? 0.3,
-        overallBias: (parsed.biasAssessment?.overallBias ?? "center") as "left" | "slight_left" | "center" | "slight_right" | "right",
-        explanation: parsed.biasAssessment?.explanation ?? "No significant bias detected.",
-      },
-      summary: parsed.summary || "Analysis completed.",
-      modelConsensus: (parsed.modelConsensus || [
-        { modelName: "GPT-4", agrees: true, confidence: 0.5 },
-        { modelName: "Claude 3", agrees: true, confidence: 0.5 },
-        { modelName: "Gemini", agrees: true, confidence: 0.5 },
-      ]).map((m: any) => ({
-        modelName: m.modelName || "AI Model",
-        agrees: !!m.agrees,
-        confidence: Math.max(0, Math.min(1, m.confidence || 0.5)),
-      })),
+      text: c.text || `Claim ${idx + 1}`,
+      verdict: c.verdict || "mixed",
+      confidence: Math.max(0, Math.min(1, conf)),
+      explanation: c.explanation || "Analysis pending.",
     };
-  } catch (e: any) {
-    console.error("[Backboard] ❌ Failed to parse analysis JSON");
-    console.error("[Backboard] Error:", e.message);
-    console.error("[Backboard] Error stack:", e.stack);
-    console.error("[Backboard] Content that failed:", content.slice(0, 1000));
-    console.error("[Backboard] Full response object:", JSON.stringify(resp).slice(0, 2000));
-    
-    // If content exists but isn't JSON, Backboard returned text instead of JSON
-    if (content.length > 50 && !content.trim().startsWith('{')) {
-      console.error("[Backboard] ⚠️ Backboard returned plain text, not JSON!");
-      console.error("[Backboard] This means the prompt didn't work - Backboard is ignoring JSON instruction");
-      
-      // Try to extract any useful info from the text response
-      // But still throw an error so we know something is wrong
-      throw new Error(
-        `Backboard returned plain text instead of JSON. The AI didn't follow the JSON format instruction. ` +
-        `Response preview: ${content.slice(0, 200)}... ` +
-        `Check Backboard prompt and ensure it's enforcing JSON-only responses.`
-      );
-    }
-    
-    // If we get here, it's a real parsing error
-    throw new Error(
-      `Failed to parse Backboard JSON response: ${e.message}. ` +
-      `Content preview: ${content.slice(0, 200)}. ` +
-      `Check Vercel logs for full response.`
-    );
+  });
+  
+  // Validate we got at least one claim
+  if (claims.length === 0) {
+    console.error("[Backboard] ❌ No claims extracted from response!");
+    console.error("[Backboard] Parsed object:", JSON.stringify(parsed).slice(0, 500));
+    throw new Error("Backboard returned no claims. Check the prompt and response format.");
   }
+  
+  // Log final extracted data
+  console.log("[Backboard] ✅ Successfully extracted:", {
+    claimsCount: claims.length,
+    avgConfidence: (claims.reduce((sum: number, c: { confidence: number }) => sum + c.confidence, 0) / claims.length).toFixed(2),
+    hasSummary: !!parsed.summary,
+    hasBias: !!parsed.biasAssessment,
+    modelConsensusCount: parsed.modelConsensus?.length || 0,
+  });
+  
+  return {
+    claims,
+    biasAssessment: {
+      politicalBias: parsed.biasAssessment?.politicalBias ?? 0,
+      sensationalism: parsed.biasAssessment?.sensationalism ?? 0.3,
+      overallBias: (parsed.biasAssessment?.overallBias ?? "center") as "left" | "slight_left" | "center" | "slight_right" | "right",
+      explanation: parsed.biasAssessment?.explanation ?? "No significant bias detected.",
+    },
+    summary: parsed.summary || "Analysis completed.",
+    modelConsensus: (parsed.modelConsensus || [
+      { modelName: "GPT-4", agrees: true, confidence: 0.5 },
+      { modelName: "Claude 3", agrees: true, confidence: 0.5 },
+      { modelName: "Gemini", agrees: true, confidence: 0.5 },
+    ]).map((m: any) => ({
+      modelName: m.modelName || "AI Model",
+      agrees: !!m.agrees,
+      confidence: Math.max(0, Math.min(1, m.confidence || 0.5)),
+    })),
+  };
 }
 
 // ──────────────────────────────────────────────
