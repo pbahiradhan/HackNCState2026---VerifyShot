@@ -27,7 +27,16 @@ export async function analyzeImage(
   } catch (err: any) {
     console.error(`[Analyzer][${jobId}] OCR failed:`, err.message);
     console.error(`[Analyzer][${jobId}] OCR error stack:`, err.stack);
-    throw new Error(`OCR failed: ${err.message}. Check GEMINI_API_KEY is set.`);
+    
+    // Provide user-friendly error messages
+    if (err.message?.includes("429") || err.message?.includes("rate limit")) {
+      throw new Error("Gemini API rate limit exceeded. Please wait a few minutes and try again. This usually happens when making too many requests quickly.");
+    }
+    if (err.message?.includes("GEMINI_API_KEY")) {
+      throw new Error("OCR failed: GEMINI_API_KEY not set. Set it in Vercel → Settings → Environment Variables.");
+    }
+    
+    throw new Error(`OCR failed: ${err.message}. Check GEMINI_API_KEY is set and has quota available.`);
   }
 
   if (!ocrText.trim()) {

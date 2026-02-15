@@ -20,7 +20,7 @@ export async function extractTextFromImage(imageUrl: string): Promise<string> {
   if (buffer[0] === 0x89 && buffer[1] === 0x50) mimeType = "image/png";
   else if (buffer[0] === 0x47 && buffer[1] === 0x49) mimeType = "image/gif";
 
-  // 2. Call Gemini Vision API
+  // 2. Call Gemini Vision API with retry logic for rate limits
   console.log("[OCR] Calling Gemini Vision…");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
@@ -49,26 +49,64 @@ Return ONLY the extracted text, nothing else. No commentary, no formatting instr
     },
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  // Retry logic for rate limits (429 errors)
+  let lastError: Error | null = null;
+  const maxRetries = 3;
+  const baseDelay = 2000; // 2 seconds
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("[OCR] Gemini error:", errText);
-    throw new Error(`Gemini Vision API error: ${res.status} — ${errText.slice(0, 200)}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (res.status === 429) {
+        // Rate limit - wait and retry
+        const retryAfter = res.headers.get("Retry-After");
+        const delay = retryAfter 
+          ? parseInt(retryAfter) * 1000 
+          : baseDelay * Math.pow(2, attempt); // Exponential backoff
+        
+        if (attempt < maxRetries) {
+          console.log(`[OCR] Rate limited (429). Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue; // Retry
+        } else {
+          throw new Error("Gemini API rate limit exceeded. Please wait a few minutes and try again.");
+        }
+      }
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("[OCR] Gemini error:", errText);
+        throw new Error(`Gemini Vision API error: ${res.status} — ${errText.slice(0, 200)}`);
+      }
+
+      // Success - break out of retry loop
+      const data = (await res.json()) as any;
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+
+      if (!text || text.length < 3) {
+        throw new Error("OCR returned no text. The image may not contain readable text.");
+      }
+
+      console.log(`[OCR] Extracted ${text.length} chars`);
+      return text;
+    } catch (err: any) {
+      lastError = err;
+      // If it's not a 429, don't retry
+      if (!err.message?.includes("429") && !err.message?.includes("rate limit")) {
+        throw err;
+      }
+      // If we've exhausted retries, throw
+      if (attempt === maxRetries) {
+        throw err;
+      }
+    }
   }
 
-  const data = (await res.json()) as any;
-  const text =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-
-  if (!text || text.length < 3) {
-    throw new Error("OCR returned no text. The image may not contain readable text.");
-  }
-
-  console.log(`[OCR] Extracted ${text.length} chars`);
-  return text;
+  // Should never reach here, but just in case
+  throw lastError || new Error("OCR failed after retries");
 }
