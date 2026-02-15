@@ -3,12 +3,26 @@
 //  ONE comprehensive analysis call + chat
 // ──────────────────────────────────────────────
 
-import { BackboardClient } from "backboard-sdk";
 import { Source, BiasSignals, ModelVerdict, Claim } from "./types";
 import { searchSources, getWebSearchTool } from "./search";
 
+// Lazy-load Backboard SDK to avoid build-time issues
 let _client: any | null = null;
-function bb(): any {
+let _BackboardClient: any | null = null;
+
+async function getBackboardClient() {
+  if (!_BackboardClient) {
+    try {
+      const { BackboardClient } = await import("backboard-sdk");
+      _BackboardClient = BackboardClient;
+    } catch (err: any) {
+      throw new Error(`Failed to load Backboard SDK: ${err.message}`);
+    }
+  }
+  return _BackboardClient;
+}
+
+async function bb(): Promise<any> {
   if (!_client) {
     const key = process.env.BACKBOARD_API_KEY;
     if (!key) {
@@ -18,6 +32,7 @@ function bb(): any {
       throw new Error("BACKBOARD_API_KEY appears invalid (too short)");
     }
     try {
+      const BackboardClient = await getBackboardClient();
       _client = new BackboardClient({ apiKey: key });
     } catch (err: any) {
       throw new Error(`Failed to initialize Backboard client: ${err.message}`);
@@ -36,7 +51,8 @@ async function getOrCreateAssistant(
 ): Promise<string> {
   if (assistantCache[name]) return assistantCache[name];
   try {
-    const asst = await bb().createAssistant({
+    const client = await bb();
+    const asst = await client.createAssistant({
       name,
       systemPrompt,
       ...(tools ? { tools } : {}),
@@ -117,7 +133,8 @@ Rules:
 - Be honest about uncertainty`;
 
   const id = await getOrCreateAssistant("VerifyShot-Analyzer-v2", systemPrompt);
-  const thread = await bb().createThread(id);
+  const backboardClient = await bb();
+  const thread = await backboardClient.createThread(id);
 
   const userMessage = `SCREENSHOT TEXT:
 """
@@ -130,7 +147,7 @@ ${srcBlock}
 Analyze this content and return the JSON response.`;
 
   console.log("[Backboard] Sending comprehensive analysis request…");
-  const resp = await bb().addMessage({
+  const resp = await backboardClient.addMessage({
     threadId: thread.threadId,
     content: userMessage,
     stream: false,
@@ -278,24 +295,26 @@ Be thorough and analytical. Use markdown formatting.`;
       throw new Error(`Failed to create Backboard assistant: ${err.message}. Check BACKBOARD_API_KEY.`);
     }
 
-    const threadKey = `${jobId}-${mode}`;
-    let threadId = chatThreads[threadKey];
-    if (!threadId) {
-      console.log(`[Backboard] Creating new thread for ${threadKey}…`);
-      try {
-        const thread = await bb().createThread(id);
-        threadId = thread.threadId;
-        chatThreads[threadKey] = threadId;
-      } catch (err: any) {
-        console.error(`[Backboard] Thread creation failed:`, err);
-        throw new Error(`Failed to create Backboard thread: ${err.message}`);
-      }
-    }
-
-    console.log(`[Backboard] Chat (${mode}): sending message…`);
-    let resp: any;
+  const threadKey = `${jobId}-${mode}`;
+  let threadId = chatThreads[threadKey];
+  if (!threadId) {
+    console.log(`[Backboard] Creating new thread for ${threadKey}…`);
     try {
-      resp = await bb().addMessage({
+      const chatClient = await bb();
+      const thread = await chatClient.createThread(id);
+      threadId = thread.threadId;
+      chatThreads[threadKey] = threadId;
+    } catch (err: any) {
+      console.error(`[Backboard] Thread creation failed:`, err);
+      throw new Error(`Failed to create Backboard thread: ${err.message}`);
+    }
+  }
+
+  console.log(`[Backboard] Chat (${mode}): sending message…`);
+  let resp: any;
+  try {
+    const chatClient = await bb();
+    resp = await chatClient.addMessage({
         threadId,
         content: userMessage,
         stream: false,
@@ -329,19 +348,20 @@ Be thorough and analytical. Use markdown formatting.`;
         }
       }
 
-      if (toolOutputs.length > 0) {
-        try {
-          const finalResp = await bb().submitToolOutputs({
-            threadId,
-            runId: resp.runId,
-            toolOutputs,
-          });
-          return finalResp.content || "Analysis complete but no text was returned.";
-        } catch (e: any) {
-          console.error("[Backboard] Tool output submission failed:", e.message);
-          // Fall through to return whatever content we have
-        }
+    if (toolOutputs.length > 0) {
+      try {
+        const toolClient = await bb();
+        const finalResp = await toolClient.submitToolOutputs({
+          threadId,
+          runId: resp.runId,
+          toolOutputs,
+        });
+        return finalResp.content || "Analysis complete but no text was returned.";
+      } catch (e: any) {
+        console.error("[Backboard] Tool output submission failed:", e.message);
+        // Fall through to return whatever content we have
       }
+    }
     }
 
     if (!resp.content) {
