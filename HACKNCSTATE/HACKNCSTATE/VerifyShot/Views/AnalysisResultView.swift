@@ -7,7 +7,22 @@ struct AnalysisResultView: View {
 
     var body: some View {
         guard let result = appState.analysisResult else {
-            return AnyView(EmptyResultsView())
+            return AnyView(
+                VStack(spacing: 16) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 48))
+                        .foregroundColor(.vsDarkGray)
+                    Text("No analysis yet")
+                        .font(.title3.weight(.medium))
+                        .foregroundColor(.vsDarkGray)
+                    Text("Upload or take a screenshot to get started")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.vsBackground)
+                .navigationTitle("Analysis Result")
+            )
         }
 
         return AnyView(
