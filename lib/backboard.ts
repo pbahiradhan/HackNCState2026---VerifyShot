@@ -6,23 +6,41 @@
 import { Source, BiasSignals, ModelVerdict, Claim } from "./types";
 import { searchSources, getWebSearchTool } from "./search";
 
-// Lazy-load Backboard SDK to avoid build-time issues
-let _client: any | null = null;
-let _BackboardClient: any | null = null;
+// Import Backboard SDK using require() for CommonJS compatibility
+// Vercel serverless functions run in Node.js which supports require()
+let BackboardClientClass: any = null;
 
-async function getBackboardClient() {
-  if (!_BackboardClient) {
-    try {
-      const { BackboardClient } = await import("backboard-sdk");
-      _BackboardClient = BackboardClient;
-    } catch (err: any) {
-      throw new Error(`Failed to load Backboard SDK: ${err.message}`);
-    }
+function loadBackboardSDK(): any {
+  if (BackboardClientClass) {
+    return BackboardClientClass;
   }
-  return _BackboardClient;
+
+  try {
+    // Use require() for CommonJS compatibility
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const module = require("backboard-sdk");
+    BackboardClientClass = module.BackboardClient || module.default?.BackboardClient || module;
+    
+    if (!BackboardClientClass || typeof BackboardClientClass !== "function") {
+      throw new Error("BackboardClient not found in SDK module. Module structure: " + JSON.stringify(Object.keys(module)));
+    }
+    
+    return BackboardClientClass;
+  } catch (err: any) {
+    // If require fails, provide helpful error message
+    if (err.code === "MODULE_NOT_FOUND") {
+      throw new Error(`Backboard SDK not found. Run: npm install backboard-sdk. Error: ${err.message}`);
+    }
+    if (err.message?.includes("exports")) {
+      throw new Error(`Backboard SDK module resolution failed. This is a known issue with ES modules in Vercel. Try: npm install backboard-sdk@latest. Error: ${err.message}`);
+    }
+    throw new Error(`Failed to load Backboard SDK: ${err.message}`);
+  }
 }
 
-async function bb(): Promise<any> {
+let _client: any | null = null;
+
+function bb(): any {
   if (!_client) {
     const key = process.env.BACKBOARD_API_KEY;
     if (!key) {
@@ -32,7 +50,7 @@ async function bb(): Promise<any> {
       throw new Error("BACKBOARD_API_KEY appears invalid (too short)");
     }
     try {
-      const BackboardClient = await getBackboardClient();
+      const BackboardClient = loadBackboardSDK();
       _client = new BackboardClient({ apiKey: key });
     } catch (err: any) {
       throw new Error(`Failed to initialize Backboard client: ${err.message}`);
@@ -51,7 +69,7 @@ async function getOrCreateAssistant(
 ): Promise<string> {
   if (assistantCache[name]) return assistantCache[name];
   try {
-    const client = await bb();
+    const client = bb();
     const asst = await client.createAssistant({
       name,
       systemPrompt,
@@ -133,7 +151,7 @@ Rules:
 - Be honest about uncertainty`;
 
   const id = await getOrCreateAssistant("VerifyShot-Analyzer-v2", systemPrompt);
-  const backboardClient = await bb();
+  const backboardClient = bb();
   const thread = await backboardClient.createThread(id);
 
   const userMessage = `SCREENSHOT TEXT:
@@ -300,7 +318,7 @@ Be thorough and analytical. Use markdown formatting.`;
   if (!threadId) {
     console.log(`[Backboard] Creating new thread for ${threadKey}…`);
     try {
-      const chatClient = await bb();
+      const chatClient = bb();
       const thread = await chatClient.createThread(id);
       threadId = thread.threadId;
       chatThreads[threadKey] = threadId;
@@ -313,7 +331,7 @@ Be thorough and analytical. Use markdown formatting.`;
   console.log(`[Backboard] Chat (${mode}): sending message…`);
   let resp: any;
   try {
-    const chatClient = await bb();
+    const chatClient = bb();
     resp = await chatClient.addMessage({
         threadId,
         content: userMessage,
@@ -348,10 +366,10 @@ Be thorough and analytical. Use markdown formatting.`;
         }
       }
 
-    if (toolOutputs.length > 0) {
-      try {
-        const toolClient = await bb();
-        const finalResp = await toolClient.submitToolOutputs({
+      if (toolOutputs.length > 0) {
+        try {
+          const toolClient = bb();
+          const finalResp = await toolClient.submitToolOutputs({
           threadId,
           runId: resp.runId,
           toolOutputs,
