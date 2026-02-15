@@ -38,7 +38,7 @@ struct CustomTabBar: View {
     var body: some View {
         HStack {
             Spacer()
-            tabButton(icon: "house.fill", label: "Home", tab: .home)
+            tabButton(icon: "shield.checkered", label: "Analyze", tab: .home)
             Spacer()
 
             // Center chat button

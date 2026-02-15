@@ -576,6 +576,51 @@ export async function chatAboutJob(
 }
 
 // ──────────────────────────────────────────────
+//  Save analysis to Backboard memory
+//  This enables cross-thread recall: the chat
+//  assistant can reference past screenshot analyses
+//  via Backboard's portable memory feature.
+// ──────────────────────────────────────────────
+
+export async function saveAnalysisToMemory(
+  content: string
+): Promise<void> {
+  try {
+    // Use the same chat assistant so memory is accessible in chat threads
+    const systemPrompt = [
+      "You are a helpful fact-checking assistant.",
+      "Answer questions about screenshot analyses.",
+      "Be concise and cite sources when relevant.",
+    ].join(" ");
+
+    const assistantId = await getOrCreateAssistant("VerifyShot-Chat-v3", systemPrompt);
+
+    console.log(`[Backboard] Saving analysis to memory for assistant ${assistantId}…`);
+    
+    const memRes = await fetch(`${BASE_URL}/assistants/${assistantId}/memories`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        content: content.slice(0, 2000),  // Keep within limits
+      }),
+    });
+
+    if (!memRes.ok) {
+      const errorText = await memRes.text();
+      console.warn(`[Backboard] Memory save failed (${memRes.status}): ${errorText}`);
+      // Non-critical — don't throw
+      return;
+    }
+
+    const memResp = (await memRes.json()) as any;
+    console.log(`[Backboard] ✅ Memory saved. ID: ${memResp.memory_id || memResp.id || "unknown"}`);
+  } catch (err: any) {
+    console.warn(`[Backboard] Memory save error (non-critical): ${err.message}`);
+    // Non-critical — swallow the error
+  }
+}
+
+// ──────────────────────────────────────────────
 //  Claim Extraction (fast, using GPT-4o-mini)
 // ──────────────────────────────────────────────
 

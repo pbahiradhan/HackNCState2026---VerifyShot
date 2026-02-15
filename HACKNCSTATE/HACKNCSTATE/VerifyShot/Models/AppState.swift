@@ -53,37 +53,68 @@ final class AppState: ObservableObject {
 
         Task {
             do {
-                // Simulate progress updates (actual progress comes from backend)
+                // Simulate progress updates
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                     self.progressText = "Searching for sources…"
                 }
-                
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     self.progressText = "Analyzing with AI…"
                 }
-                
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     self.progressText = "Detecting bias across perspectives…"
                 }
-                
                 DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                     self.progressText = "Calculating trust score…"
                 }
-                
+
                 let result = try await api.analyzeImage(image)
                 self.analysisResult = result
                 self.imageUrl = result.imageUrl
                 self.isAnalyzing = false
                 self.showAnalysis = true
-                self.selectedTab = .chat
+                // Stay on home tab — analysis results are shown inline on home
+                self.selectedTab = .home
                 self.history.insert(result, at: 0)
                 self.progressText = ""
+
+                // Save analysis to Backboard memory for chat recall
+                await saveAnalysisToMemory(result)
             } catch {
                 self.analysisError = error.localizedDescription
                 self.isAnalyzing = false
                 self.progressText = ""
                 print("[AppState] Analysis error: \(error.localizedDescription)")
             }
+        }
+    }
+
+    // MARK: - Save analysis to Backboard memory (for cross-thread recall)
+
+    private func saveAnalysisToMemory(_ result: AnalysisResult) async {
+        // Build a concise memory string for Backboard
+        var memoryParts: [String] = []
+        memoryParts.append("Screenshot Analysis (Trust: \(result.aggregateTrustScore)%, \(result.trustLabel)):")
+        memoryParts.append("Summary: \(result.summary)")
+
+        for (i, claim) in result.claims.enumerated() {
+            memoryParts.append("Claim \(i + 1): \"\(claim.text)\" — \(claim.verdict), \(claim.trustScore)% trust")
+            if !claim.explanation.isEmpty {
+                memoryParts.append("  Explanation: \(claim.explanation)")
+            }
+            if !claim.sources.isEmpty {
+                let sourceNames = claim.sources.prefix(3).map { "\($0.title) (\($0.domain))" }.joined(separator: "; ")
+                memoryParts.append("  Sources: \(sourceNames)")
+            }
+        }
+
+        let memoryContent = memoryParts.joined(separator: "\n")
+
+        do {
+            try await api.saveAnalysisMemory(jobId: result.jobId, content: memoryContent)
+            print("[AppState] Analysis saved to Backboard memory")
+        } catch {
+            // Non-critical — don't show error to user
+            print("[AppState] Memory save failed (non-critical): \(error.localizedDescription)")
         }
     }
 
@@ -110,14 +141,12 @@ final class AppState: ObservableObject {
             return
         }
 
-        // Load the image
         let image = await loadImage(from: asset)
         guard let screenshot = image else {
             print("Failed to load screenshot image")
             return
         }
 
-        // Auto-analyze
         analyzeScreenshot(screenshot)
     }
 
@@ -141,46 +170,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Text Query (inline chat — no sheet)
-
-    func startTextQuery(_ text: String) {
-        let userMsg = ChatMessage(role: .user, content: text)
-        chatMessages.append(userMsg)
-        isChatting = true
-
-        let mode = isDeepResearchMode ? "deep_research" : "standard"
-
-        let context: String
-        if let result = analysisResult {
-            context = result.claims.map { claim in
-                "Claim: \(claim.text)\nVerdict: \(claim.verdict)\nScore: \(claim.trustScore)%\nSources: \(claim.sources.map(\.title).joined(separator: ", "))"
-            }.joined(separator: "\n\n")
-        } else {
-            context = ""
-        }
-
-        Task {
-            do {
-                let reply = try await api.chat(
-                    jobId: analysisResult?.jobId ?? "",
-                    message: text,
-                    context: context,
-                    mode: mode
-                )
-                let assistantMsg = ChatMessage(role: .assistant, content: reply)
-                self.chatMessages.append(assistantMsg)
-            } catch {
-                let errMsg = ChatMessage(
-                    role: .assistant,
-                    content: "Error: \(error.localizedDescription)"
-                )
-                self.chatMessages.append(errMsg)
-            }
-            self.isChatting = false
-        }
-    }
-
-    // MARK: - Continue Chat (send follow-up messages)
+    // MARK: - Chat
 
     func sendChatMessage(_ text: String) {
         let userMsg = ChatMessage(role: .user, content: text)
@@ -194,6 +184,8 @@ final class AppState: ObservableObject {
 
         let mode = isDeepResearchMode ? "deep_research" : "standard"
 
+        // Build context from analysis (also stored in Backboard memory, but
+        // we still pass it for the first message before memory settles)
         let context: String
         if let result = analysisResult {
             context = result.claims.map { claim in
@@ -211,20 +203,18 @@ final class AppState: ObservableObject {
                     context: context,
                     mode: mode
                 )
-                
-                // Mark all research steps as complete
+
                 if isDeepResearchMode {
                     completeResearchSteps()
                 }
-                
+
                 let assistantMsg = ChatMessage(role: .assistant, content: reply)
                 self.chatMessages.append(assistantMsg)
             } catch {
-                // Mark research steps as complete even on error
                 if isDeepResearchMode {
                     completeResearchSteps()
                 }
-                
+
                 let errMsg = ChatMessage(
                     role: .assistant,
                     content: "Error: \(error.localizedDescription)"
@@ -234,9 +224,9 @@ final class AppState: ObservableObject {
             self.isChatting = false
         }
     }
-    
+
     // MARK: - Deep Research Steps
-    
+
     func startResearchSteps() {
         researchSteps = [
             ResearchStep(title: "Understanding your question...", icon: "sparkles", delay: 0),
@@ -246,7 +236,7 @@ final class AppState: ObservableObject {
             ResearchStep(title: "Synthesizing findings...", icon: "text.badge.checkmark", delay: 7.0),
         ]
     }
-    
+
     func completeResearchSteps() {
         researchSteps = researchSteps.map { step in
             ResearchStep(title: step.title, icon: step.icon, delay: step.delay, isComplete: true)
@@ -260,18 +250,19 @@ final class AppState: ObservableObject {
         if chatMessages.isEmpty {
             let welcomeMsg = ChatMessage(
                 role: .assistant,
-                content: "I have context from your screenshot analysis (\(result.aggregateTrustScore)% trust score, \(result.claims.count) claim\(result.claims.count == 1 ? "" : "s")). What would you like to know?"
+                content: "I have context from your screenshot analysis (\(result.aggregateTrustScore)% trust score, \(result.claims.count) claim\(result.claims.count == 1 ? "" : "s")). Ask me anything about it, or switch to Deep Research for an in-depth investigation."
             )
             chatMessages.append(welcomeMsg)
         }
         selectedTab = .chat
     }
 
-    // MARK: - Clear chat (back to home)
+    // MARK: - Clear / Reset
 
     func clearChat() {
         chatMessages = []
         isDeepResearchMode = false
+        researchSteps = []
     }
 
     func resetForNewScreenshot() {

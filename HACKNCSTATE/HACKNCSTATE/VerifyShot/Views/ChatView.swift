@@ -112,11 +112,11 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Context Banner
+    // MARK: - Context Banner (tap to go back to analysis on Home tab)
 
     private func contextBanner(_ result: AnalysisResult) -> some View {
-        NavigationLink {
-            AnalysisResultView()
+        Button {
+            appState.selectedTab = .home
         } label: {
             HStack(spacing: 12) {
                 // Screenshot thumbnail
@@ -137,16 +137,21 @@ struct ChatView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Screenshot Analysis Active")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.primary)
+                    HStack(spacing: 6) {
+                        Image(systemName: "brain.head.profile")
+                            .font(.caption2)
+                            .foregroundColor(.vsOrange)
+                        Text("Analysis Context Active")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.primary)
+                    }
                     HStack(spacing: 6) {
                         Text("\(result.aggregateTrustScore)%")
                             .font(.caption.weight(.bold))
                             .foregroundColor(.forTrustScore(result.aggregateTrustScore))
                         Text("•")
                             .foregroundColor(.secondary)
-                        Text("\(result.claims.count) claim\(result.claims.count == 1 ? "" : "s")")
+                        Text("\(result.claims.count) claim\(result.claims.count == 1 ? "" : "s") in memory")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -154,13 +159,23 @@ struct ChatView: View {
 
                 Spacer()
 
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Image(systemName: "arrow.left")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.vsOrange)
             }
             .padding(12)
-            .background(Color(uiColor: .secondarySystemBackground))
+            .background(
+                LinearGradient(
+                    colors: [Color.vsOrange.opacity(0.05), Color(uiColor: .secondarySystemBackground)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.vsOrange.opacity(0.15), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }

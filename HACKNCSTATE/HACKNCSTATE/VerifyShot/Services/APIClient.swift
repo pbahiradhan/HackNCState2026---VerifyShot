@@ -71,6 +71,16 @@ final class APIClient {
         return resp.reply
     }
 
+    // MARK: - Save Analysis to Backboard Memory (for cross-thread chat recall)
+
+    func saveAnalysisMemory(jobId: String, content: String) async throws {
+        let body: [String: Any] = [
+            "jobId": jobId,
+            "content": content
+        ]
+        _ = try await post(path: "/api/save-memory", body: body)
+    }
+
     // MARK: - Health Check
 
     func healthCheck() async -> String {
