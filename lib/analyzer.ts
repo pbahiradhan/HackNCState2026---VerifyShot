@@ -6,7 +6,7 @@
 
 import { extractTextFromImage } from "./geminiOcr";
 import { extractClaims, verifyClaimMultiModel, ModelVerification } from "./backboardHttp";
-import { searchSources } from "./search";
+import { searchCombined } from "./search";
 import { detectBias } from "./biasDetection";
 import { calculateTrustScore, biasPenalty, trustLabel } from "./trustScore";
 import { AnalysisResult, Claim, Source, ModelVerdict, BiasSignals } from "./types";
@@ -52,7 +52,7 @@ export async function analyzeImage(
     const sentences = ocrText.split(/[.!?\n]/).map(s => s.trim()).filter(s => s.length > 15);
     const primaryQuery = sentences[0] || ocrText.slice(0, 200);
     
-    // Run claim extraction + primary search in parallel
+    // Run claim extraction + AI-powered search in parallel
     const [claimsResult, primarySources] = await Promise.all([
       extractClaims(ocrText).catch((err: any) => {
         console.warn(`[Orchestrator][${jobId}] Claim extraction failed:`, err.message);
@@ -61,7 +61,8 @@ export async function analyzeImage(
           ? [{ text: firstSentence }]
           : [{ text: ocrText.slice(0, 200) }];
       }),
-      searchSources(primaryQuery, 10).catch((err: any) => {
+      // Uses Perplexity via Backboard (built-in web search, no Google API needed)
+      searchCombined(primaryQuery, 8).catch((err: any) => {
         console.warn(`[Orchestrator][${jobId}] Primary search failed:`, err.message);
         return [];
       }),
@@ -71,11 +72,11 @@ export async function analyzeImage(
     sources = primarySources;
     
     // If primary search returned few results, run additional searches using extracted claims
-    if (sources.length < 5 && extractedClaims.length > 0) {
+    if (sources.length < 3 && extractedClaims.length > 0) {
       console.log(`[Orchestrator][${jobId}] Running additional searches for ${extractedClaims.length} claim(s)…`);
       const additionalSearches = await Promise.all(
-        extractedClaims.slice(0, 3).map(claim =>
-          searchSources(claim.text, 5).catch(() => [] as Source[])
+        extractedClaims.slice(0, 2).map(claim =>
+          searchCombined(claim.text, 5).catch(() => [] as Source[])
         )
       );
       
@@ -106,9 +107,9 @@ export async function analyzeImage(
   const hasMinimumSources = highQualitySources.length >= 2;
   
   if (!hasMinimumSources && sources.length === 0) {
-    // Only block if we got ZERO sources at all (search keys not configured or total failure)
+    // Only block if we got ZERO sources at all
     console.log(`[Orchestrator][${jobId}] ⚠️ Quality gate failed: no sources found at all`);
-    console.log(`[Orchestrator][${jobId}] ⚠️ Check GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID are set in Vercel`);
+    console.log(`[Orchestrator][${jobId}] ⚠️ Check BACKBOARD_API_KEY is set (for Perplexity search)`);
     
     // Return "unable to verify" result
     const result: AnalysisResult = {
@@ -120,7 +121,7 @@ export async function analyzeImage(
         text: c.text,
         verdict: "unable_to_verify" as const,
         trustScore: 0,
-        explanation: `Unable to verify: No web sources found. Make sure Google Search API keys are configured.`,
+        explanation: `Unable to verify: No web sources found. Ensure BACKBOARD_API_KEY is set for AI-powered search.`,
         sources: [],
         biasSignals: {
           politicalBias: 0,
@@ -132,7 +133,7 @@ export async function analyzeImage(
       })),
       aggregateTrustScore: 0,
       trustLabel: "Unable to Verify",
-      summary: `Unable to verify claims: No web sources found. Configure GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID in Vercel environment variables.`,
+      summary: `Unable to verify claims: No web sources found. Ensure BACKBOARD_API_KEY is set in Vercel environment variables for AI-powered search.`,
       generatedAt: new Date().toISOString(),
     };
     

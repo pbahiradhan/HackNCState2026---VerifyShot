@@ -10,7 +10,7 @@
 // ──────────────────────────────────────────────
 
 import { Source } from "./types";
-import { searchSources, getWebSearchTool } from "./search";
+import { searchCombined, getWebSearchTool } from "./search";
 
 const BASE_URL = "https://app.backboard.io/api";
 
@@ -457,7 +457,7 @@ export async function chatAboutJob(
       if (tc.function?.name === "web_search") {
         try {
           const args = tc.function.parsed_arguments || JSON.parse(tc.function.arguments || "{}");
-          const sources = await searchSources(args.query, args.limit || 5);
+          const sources = await searchCombined(args.query, args.limit || 5);
           toolOutputs.push({
             tool_call_id: tc.id,
             output: JSON.stringify(sources),
@@ -678,7 +678,7 @@ export async function extractClaims(ocrText: string): Promise<ExtractedClaim[]> 
   const resp = (await messageRes.json()) as any;
   let content = resp.content || resp.message?.content || "";
   
-  // Parse JSON array
+  // Parse JSON array — handle Python-escaped quotes from Backboard
   content = content.trim();
   if (content.startsWith("```")) {
     content = content.replace(/```(?:json)?\n?/g, "").replace(/```\s*$/g, "").trim();
@@ -691,8 +691,33 @@ export async function extractClaims(ocrText: string): Promise<ExtractedClaim[]> 
     throw new Error(`Failed to extract claims: no JSON array found. Content: ${content.slice(0, 200)}`);
   }
 
-  const jsonStr = content.substring(firstBracket, lastBracket + 1);
-  const parsed = JSON.parse(jsonStr) as any[];
+  let jsonStr = content.substring(firstBracket, lastBracket + 1);
+  
+  // Fix common Backboard/Python escape issues:
+  // - Python-escaped single quotes: \' → '
+  // - Single quotes instead of double: ' → "
+  // - Trailing commas
+  jsonStr = jsonStr
+    .replace(/\\'/g, "'")        // Remove Python-escaped single quotes
+    .replace(/,\s*]/g, "]")     // Trailing commas in arrays
+    .replace(/,\s*}/g, "}")     // Trailing commas in objects
+    .replace(/\n/g, " ");       // Newlines within strings
+  
+  let parsed: any[];
+  try {
+    parsed = JSON.parse(jsonStr) as any[];
+  } catch (e1: any) {
+    console.warn(`[ClaimExtract] JSON parse failed, trying with single→double quote fix: ${e1.message}`);
+    // Try replacing single quotes with double quotes
+    // Be careful: only replace quotes that are JSON delimiters, not inside text
+    try {
+      const fixed = jsonStr.replace(/'/g, '"');
+      parsed = JSON.parse(fixed) as any[];
+    } catch (e2: any) {
+      console.error(`[ClaimExtract] All JSON fixes failed. Raw: ${jsonStr.slice(0, 200)}`);
+      throw new Error(`${e2.message}. Raw content: ${jsonStr.slice(0, 200)}`);
+    }
+  }
 
   return parsed.map((c: any) => ({
     text: c.text || String(c),

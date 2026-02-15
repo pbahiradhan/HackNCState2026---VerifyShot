@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────
 
 import { Source, BiasSignals, ModelVerdict, Claim } from "./types";
-import { searchSources, getWebSearchTool } from "./search";
+import { searchCombined, getWebSearchTool } from "./search";
 
 // Import Backboard SDK - it's ES module only, so we need to use dynamic import
 // Vercel serverless functions support ES modules via dynamic import()
@@ -370,7 +370,7 @@ Be thorough and analytical. Use markdown formatting.`;
         if (tc.function.name === "web_search") {
           try {
             const args = tc.function.parsedArguments || JSON.parse(tc.function.arguments || "{}");
-            const sources = await searchSources(args.query, args.limit || 5);
+            const sources = await searchCombined(args.query, args.limit || 5);
             toolOutputs.push({
               toolCallId: tc.id,
               output: JSON.stringify(sources),
