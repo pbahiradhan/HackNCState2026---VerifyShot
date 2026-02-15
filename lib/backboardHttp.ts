@@ -112,53 +112,38 @@ export async function analyzeTextComprehensive(
     ? sources.map((s, i) => `[${i + 1}] ${s.title} (${s.domain}, ${s.date}): ${s.snippet}`).join("\n")
     : "No web sources available.";
 
-  const systemPrompt = `You are an expert fact-checker. Analyze the screenshot text and web sources.
+  const systemPrompt = `You are a JSON-only fact-checking API. You MUST respond with ONLY valid JSON. No markdown, no code blocks, no explanations, no text before or after.
 
-CRITICAL: Your response MUST be ONLY valid JSON. No markdown, no code blocks, no explanations, no text before or after the JSON. Just the JSON object starting with { and ending with }.
+RESPONSE FORMAT RULES:
+1. Start your response with { (opening brace)
+2. End your response with } (closing brace)
+3. Do NOT wrap the JSON in quotes, backticks, or any other characters
+4. Do NOT add any text before or after the JSON
+5. The response must be parseable by JSON.parse() directly
 
-Example of correct response format:
-{"claims":[{"text":"Claim here","verdict":"likely_true","confidence":0.85,"explanation":"..."}],"biasAssessment":{"politicalBias":0.2,"sensationalism":0.3,"overallBias":"center","explanation":"..."},"summary":"Summary here","modelConsensus":[{"modelName":"GPT-4","agrees":true,"confidence":0.8}]}
+EXAMPLE OF CORRECT OUTPUT (copy this exact format):
+{"claims":[{"text":"Example claim","verdict":"likely_true","confidence":0.85,"explanation":"Explanation here"}],"biasAssessment":{"politicalBias":0.2,"sensationalism":0.3,"overallBias":"center","explanation":"Bias explanation"},"summary":"Summary text","modelConsensus":[{"modelName":"GPT-4","agrees":true,"confidence":0.8},{"modelName":"Claude 3","agrees":true,"confidence":0.75},{"modelName":"Gemini","agrees":false,"confidence":0.4}]}
 
-Required JSON structure:
+REQUIRED JSON STRUCTURE:
 {
-  "claims": [
-    {
-      "text": "The exact factual claim from the screenshot",
-      "verdict": "likely_true" or "mixed" or "likely_misleading",
-      "confidence": 0.0 to 1.0 (use actual values based on evidence, NOT 0.5),
-      "explanation": "2-3 sentences explaining the verdict"
-    }
-  ],
-  "biasAssessment": {
-    "politicalBias": -1.0 to 1.0,
-    "sensationalism": 0.0 to 1.0,
-    "overallBias": "left" or "slight_left" or "center" or "slight_right" or "right",
-    "explanation": "Brief bias explanation"
-  },
-  "summary": "2-3 sentence summary of findings",
-  "modelConsensus": [
-    {"modelName": "GPT-4", "agrees": true/false, "confidence": 0.0-1.0},
-    {"modelName": "Claude 3", "agrees": true/false, "confidence": 0.0-1.0},
-    {"modelName": "Gemini", "agrees": true/false, "confidence": 0.0-1.0}
-  ]
+  "claims": [{"text": "string", "verdict": "likely_true|mixed|likely_misleading", "confidence": 0.0-1.0, "explanation": "string"}],
+  "biasAssessment": {"politicalBias": -1.0 to 1.0, "sensationalism": 0.0 to 1.0, "overallBias": "left|slight_left|center|slight_right|right", "explanation": "string"},
+  "summary": "string",
+  "modelConsensus": [{"modelName": "string", "agrees": true/false, "confidence": 0.0-1.0}]
 }
 
 VERDICT RULES:
-- "likely_true": Supported by credible sources (confidence 0.7-1.0)
-- "mixed": Conflicting/insufficient evidence (confidence 0.4-0.7)
-- "likely_misleading": Contradicts sources or lacks evidence (confidence 0.0-0.4)
+- "likely_true": confidence 0.7-1.0, supported by credible sources
+- "mixed": confidence 0.4-0.7, conflicting/insufficient evidence
+- "likely_misleading": confidence 0.0-0.4, contradicts sources or lacks evidence
 
-CONFIDENCE RULES (use actual values, not defaults):
+CONFIDENCE RULES (use actual values, NOT 0.5):
 - 0.8-1.0: Strong evidence from multiple credible sources
 - 0.6-0.8: Good evidence from credible sources
 - 0.4-0.6: Mixed or limited evidence
 - 0.0-0.4: Weak or contradictory evidence
 
-IMPORTANT:
-- Return ONLY the JSON object, nothing else
-- Use actual confidence values (0.6-0.9 for good evidence, 0.3-0.5 for weak evidence)
-- Base verdicts on the provided sources
-- Extract 1-3 specific factual claims (not opinions)`;
+CRITICAL: Your response must be valid JSON that can be parsed directly. Start with { and end with }. No other characters.`;
 
   const assistantId = await getOrCreateAssistant("VerifyShot-Analyzer-v2", systemPrompt);
 
@@ -195,6 +180,10 @@ Analyze this content and return the JSON response.`;
   formData.append("content", userMessage);
   formData.append("stream", "false");
   formData.append("memory", "Auto");
+  // Try to use a model that supports better JSON output
+  // GPT-4o tends to follow JSON format instructions better
+  formData.append("llm_provider", "openai");
+  formData.append("model_name", "gpt-4o");
   
   const messageRes = await fetch(`${BASE_URL}/threads/${threadId}/messages`, {
     method: "POST",
