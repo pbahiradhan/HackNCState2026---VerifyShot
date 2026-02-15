@@ -323,7 +323,7 @@ Analyze this content and return the JSON response.`;
     // Log final extracted data
     console.log("[Backboard] ✅ Successfully extracted:", {
       claimsCount: claims.length,
-      avgConfidence: (claims.reduce((sum, c) => sum + c.confidence, 0) / claims.length).toFixed(2),
+      avgConfidence: (claims.reduce((sum: number, c: { confidence: number }) => sum + c.confidence, 0) / claims.length).toFixed(2),
       hasSummary: !!parsed.summary,
       hasBias: !!parsed.biasAssessment,
       modelConsensusCount: parsed.modelConsensus?.length || 0,
