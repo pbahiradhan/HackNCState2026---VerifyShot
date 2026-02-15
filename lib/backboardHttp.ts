@@ -112,64 +112,53 @@ export async function analyzeTextComprehensive(
     ? sources.map((s, i) => `[${i + 1}] ${s.title} (${s.domain}, ${s.date}): ${s.snippet}`).join("\n")
     : "No web sources available.";
 
-  const systemPrompt = `You are an expert fact-checker and media analyst. Analyze the provided screenshot text and web sources to produce a comprehensive fact-check report.
+  const systemPrompt = `You are an expert fact-checker. Analyze the screenshot text and web sources.
 
-CRITICAL INSTRUCTIONS:
-1. You MUST return ONLY valid JSON - no markdown, no code blocks, no text before or after
-2. Start your response with { and end with }
-3. Use actual numbers for confidence (0.0-1.0), not defaults
-4. Base confidence on source evidence quality
+CRITICAL: Your response MUST be ONLY valid JSON. No markdown, no code blocks, no explanations, no text before or after the JSON. Just the JSON object starting with { and ending with }.
+
+Example of correct response format:
+{"claims":[{"text":"Claim here","verdict":"likely_true","confidence":0.85,"explanation":"..."}],"biasAssessment":{"politicalBias":0.2,"sensationalism":0.3,"overallBias":"center","explanation":"..."},"summary":"Summary here","modelConsensus":[{"modelName":"GPT-4","agrees":true,"confidence":0.8}]}
 
 Required JSON structure:
 {
   "claims": [
     {
-      "text": "The exact factual claim extracted from the screenshot text",
-      "verdict": "likely_true",
-      "confidence": 0.85,
-      "explanation": "2-3 sentence explanation citing specific sources"
+      "text": "The exact factual claim from the screenshot",
+      "verdict": "likely_true" or "mixed" or "likely_misleading",
+      "confidence": 0.0 to 1.0 (use actual values based on evidence, NOT 0.5),
+      "explanation": "2-3 sentences explaining the verdict"
     }
   ],
   "biasAssessment": {
-    "politicalBias": 0.2,
-    "sensationalism": 0.3,
-    "overallBias": "slight_right",
-    "explanation": "Brief explanation of detected bias patterns"
+    "politicalBias": -1.0 to 1.0,
+    "sensationalism": 0.0 to 1.0,
+    "overallBias": "left" or "slight_left" or "center" or "slight_right" or "right",
+    "explanation": "Brief bias explanation"
   },
-  "summary": "2-3 sentence summary of the overall fact-check findings",
+  "summary": "2-3 sentence summary of findings",
   "modelConsensus": [
-    {"modelName": "GPT-4", "agrees": true, "confidence": 0.8},
-    {"modelName": "Claude 3", "agrees": true, "confidence": 0.75},
-    {"modelName": "Gemini", "agrees": false, "confidence": 0.4}
+    {"modelName": "GPT-4", "agrees": true/false, "confidence": 0.0-1.0},
+    {"modelName": "Claude 3", "agrees": true/false, "confidence": 0.0-1.0},
+    {"modelName": "Gemini", "agrees": true/false, "confidence": 0.0-1.0}
   ]
 }
 
 VERDICT RULES:
-- "likely_true": Claim is supported by credible sources (confidence 0.7-1.0)
-- "mixed": Evidence is conflicting or insufficient (confidence 0.4-0.7)
-- "likely_misleading": Claim contradicts credible sources or lacks evidence (confidence 0.0-0.4)
+- "likely_true": Supported by credible sources (confidence 0.7-1.0)
+- "mixed": Conflicting/insufficient evidence (confidence 0.4-0.7)
+- "likely_misleading": Contradicts sources or lacks evidence (confidence 0.0-0.4)
 
-CONFIDENCE RULES:
+CONFIDENCE RULES (use actual values, not defaults):
 - 0.8-1.0: Strong evidence from multiple credible sources
 - 0.6-0.8: Good evidence from credible sources
 - 0.4-0.6: Mixed or limited evidence
 - 0.0-0.4: Weak or contradictory evidence
 
-BIAS RULES:
-- politicalBias: -1.0 (strong left) to 1.0 (strong right), 0 = neutral
-- sensationalism: 0.0 (factual) to 1.0 (highly sensational)
-- overallBias: "left", "slight_left", "center", "slight_right", "right"
-
-MODEL CONSENSUS RULES:
-- "agrees": true if the model would support the main claim, false if it would dispute it
-- "confidence": How confident that model would be (0.0-1.0)
-
 IMPORTANT:
-1. Extract 1-3 specific, verifiable factual claims (not opinions or general statements)
-2. Base verdicts on the provided web sources - cite them in explanations
-3. If no sources provided, use "mixed" verdict with lower confidence
-4. Be honest about uncertainty - don't overstate confidence
-5. Return ONLY the JSON object, nothing else`;
+- Return ONLY the JSON object, nothing else
+- Use actual confidence values (0.6-0.9 for good evidence, 0.3-0.5 for weak evidence)
+- Base verdicts on the provided sources
+- Extract 1-3 specific factual claims (not opinions)`;
 
   const assistantId = await getOrCreateAssistant("VerifyShot-Analyzer-v2", systemPrompt);
 
