@@ -1,12 +1,12 @@
 import SwiftUI
 
-// MARK: - Research Chat View (Manus AI-style)
+// MARK: - ChatGPT-Style Chat View
 
 struct ChatView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) var colorScheme
     @State private var inputText = ""
     @FocusState private var isInputFocused: Bool
-    @State private var showModeToggle = true
 
     private var hasAnalysisContext: Bool {
         appState.analysisResult != nil
@@ -14,108 +14,104 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Mode toggle (Standard vs Deep Research)
-            if showModeToggle {
-                modeToggle
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
-            }
-
-            // Chat messages
+            // Messages scroll view
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 16) {
-                        // Context banner (when screenshot analyzed)
+                    LazyVStack(spacing: 0) {
+                        // Context banner (when screenshot analyzed) - at top
                         if let result = appState.analysisResult {
                             contextBanner(result)
+                                .padding(.top, 8)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 16)
                         }
 
                         // Welcome message (only if no messages yet)
                         if appState.chatMessages.isEmpty {
                             welcomeMessage
+                                .padding(.top, 40)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 20)
                         }
 
                         // Messages
                         ForEach(appState.chatMessages) { msg in
-                            messageBubble(msg)
+                            messageRow(msg)
                                 .id(msg.id)
                         }
 
-                        // Research steps (Deep Research mode only)
-                        if appState.isDeepResearchMode && !appState.researchSteps.isEmpty {
-                            researchStepsPanel
+                        // Research steps (shown as inline assistant messages during deep research)
+                        if appState.isDeepResearchMode && !appState.researchSteps.isEmpty && appState.isChatting {
+                            researchStepsInline
                         }
 
                         // Typing indicator (Standard mode)
                         if appState.isChatting && !appState.isDeepResearchMode {
-                            typingIndicator
+                            typingIndicatorRow
                         }
+
+                        // Bottom padding for input bar
+                        Color.clear
+                            .frame(height: 20)
+                            .id("bottom")
                     }
-                    .padding(16)
                 }
                 .onChange(of: appState.chatMessages.count) { _, _ in
-                    if let last = appState.chatMessages.last {
-                        withAnimation {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
+                    scrollToBottom(proxy: proxy)
+                }
+                .onChange(of: appState.isChatting) { _, _ in
+                    if !appState.isChatting {
+                        scrollToBottom(proxy: proxy)
                     }
                 }
             }
 
-            Divider()
-
-            // Input bar
+            // Input bar (always at bottom)
             inputBar
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    Group {
+                        if colorScheme == .dark {
+                            Color(uiColor: .systemBackground)
+                        } else {
+                            Color(uiColor: .systemBackground)
+                        }
+                    }
+                )
+                .safeAreaInset(edge: .bottom) {
+                    Color.clear.frame(height: 0)
+                }
         }
-        .background(Color.vsBackground)
-        .navigationTitle("Verify")
+        .background(
+            Group {
+                if colorScheme == .dark {
+                    Color(uiColor: .systemBackground)
+                } else {
+                    Color(uiColor: .systemBackground)
+                }
+            }
+        )
+        .navigationTitle("VerifyShot")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Clear") {
+                Button {
                     appState.clearChat()
+                } label: {
+                    Text("Clear")
+                        .foregroundColor(.vsOrange)
                 }
-                .foregroundColor(.vsOrange)
             }
         }
     }
 
-    // MARK: - Mode Toggle
+    // MARK: - Scroll Helper
 
-    private var modeToggle: some View {
-        HStack(spacing: 0) {
-            Button {
-                appState.isDeepResearchMode = false
-            } label: {
-                Text("Standard")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(appState.isDeepResearchMode ? .vsDarkGray : .white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(appState.isDeepResearchMode ? Color.clear : Color.vsNavy)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-
-            Button {
-                appState.isDeepResearchMode = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkle.magnifyingglass")
-                        .font(.caption)
-                    Text("Deep Research")
-                        .font(.subheadline.weight(.semibold))
-                }
-                .foregroundColor(appState.isDeepResearchMode ? .white : .vsDarkGray)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(appState.isDeepResearchMode ? Color.vsOrange : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.3)) {
+            proxy.scrollTo("bottom", anchor: .bottom)
         }
-        .padding(4)
-        .background(Color.vsGray)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     // MARK: - Context Banner
@@ -130,53 +126,43 @@ struct ChatView: View {
                     Image(uiImage: img)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
-                        .frame(width: 50, height: 50)
+                        .frame(width: 40, height: 40)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 } else {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.vsGray)
-                        .frame(width: 50, height: 50)
+                        .fill(Color(uiColor: .secondarySystemBackground))
+                        .frame(width: 40, height: 40)
                         .overlay(
                             Image(systemName: "photo")
-                                .foregroundColor(.vsDarkGray)
+                                .foregroundColor(.secondary)
                         )
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Screenshot Analysis Active")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.vsNavy)
+                        .foregroundColor(.primary)
                     HStack(spacing: 6) {
                         Text("\(result.aggregateTrustScore)%")
                             .font(.caption.weight(.bold))
                             .foregroundColor(.forTrustScore(result.aggregateTrustScore))
                         Text("•")
-                            .foregroundColor(.vsDarkGray)
+                            .foregroundColor(.secondary)
                         Text("\(result.claims.count) claim\(result.claims.count == 1 ? "" : "s")")
                             .font(.caption)
-                            .foregroundColor(.vsDarkGray)
+                            .foregroundColor(.secondary)
                     }
                 }
 
                 Spacer()
 
-                HStack(spacing: 4) {
-                    Text("View Full")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.vsOrange)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundColor(.vsOrange)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.vsOrange.opacity(0.1))
-                .clipShape(Capsule())
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
             .padding(12)
-            .background(Color.white)
+            .background(Color(uiColor: .secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -184,39 +170,26 @@ struct ChatView: View {
     // MARK: - Welcome Message
 
     private var welcomeMessage: some View {
-        VStack(spacing: 16) {
-            // VerifyShot branding
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.vsOrangeLight, Color.vsOrange],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-                    .shadow(color: .vsOrange.opacity(0.3), radius: 12, y: 6)
-                
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 36))
-                    .foregroundColor(.white)
-            }
+        VStack(spacing: 20) {
+            // VerifyShot icon
+            Image(systemName: "checkmark.shield.fill")
+                .font(.system(size: 48))
+                .foregroundColor(.vsOrange)
 
             VStack(spacing: 8) {
                 Text("Welcome to VerifyShot")
                     .font(.title2.bold())
-                    .foregroundColor(.vsNavy)
+                    .foregroundColor(.primary)
 
                 if hasAnalysisContext {
                     Text("Ask me about your screenshot analysis")
                         .font(.subheadline)
-                        .foregroundColor(.vsDarkGray)
+                        .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                 } else {
                     Text("Upload a screenshot or ask me to verify any claim")
                         .font(.subheadline)
-                        .foregroundColor(.vsDarkGray)
+                        .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                 }
             }
@@ -235,7 +208,6 @@ struct ChatView: View {
             }
             .padding(.top, 8)
         }
-        .padding(.vertical, 32)
     }
 
     private func quickChip(_ text: String) -> some View {
@@ -245,105 +217,257 @@ struct ChatView: View {
         } label: {
             Text(text)
                 .font(.subheadline)
-                .foregroundColor(.vsNavy)
+                .foregroundColor(.primary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
     }
 
-    // MARK: - Message Bubble
+    // MARK: - Message Row (ChatGPT style)
 
-    private func messageBubble(_ message: ChatMessage) -> some View {
-        HStack {
-            if message.role == .user { Spacer(minLength: 60) }
+    private func messageRow(_ message: ChatMessage) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            if message.role == .assistant {
+                // Assistant avatar (left side)
+                assistantAvatar
+            }
 
-            Text(message.content)
-                .font(.body)
-                .foregroundColor(message.role == .user ? .white : .primary)
-                .padding(14)
-                .background(
-                    message.role == .user
-                        ? AnyShapeStyle(Color.vsNavy)
-                        : AnyShapeStyle(Color.white)
-                )
-                .clipShape(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                )
-                .shadow(color: .black.opacity(message.role == .assistant ? 0.04 : 0), radius: 4, y: 2)
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
+                // Message bubble
+                Text(message.content)
+                    .font(.body)
+                    .foregroundColor(message.role == .user ? .white : .primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        message.role == .user
+                            ? Color.vsNavy
+                            : Color(uiColor: .secondarySystemBackground)
+                    )
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    )
+            }
+            .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
 
-            if message.role == .assistant { Spacer(minLength: 60) }
+            if message.role == .user {
+                // User avatar (right side)
+                userAvatar
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var assistantAvatar: some View {
+        ZStack {
+            Circle()
+                .fill(Color.vsOrange.opacity(0.15))
+                .frame(width: 32, height: 32)
+            Image(systemName: "checkmark.shield.fill")
+                .font(.system(size: 16))
+                .foregroundColor(.vsOrange)
         }
     }
 
-    // MARK: - Research Steps Panel
+    private var userAvatar: some View {
+        ZStack {
+            Circle()
+                .fill(Color.vsNavy.opacity(0.15))
+                .frame(width: 32, height: 32)
+            Image(systemName: "person.fill")
+                .font(.system(size: 16))
+                .foregroundColor(.vsNavy)
+        }
+    }
 
-    private var researchStepsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    // MARK: - Research Steps Inline (shown as assistant messages)
+
+    private var researchStepsInline: some View {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(appState.researchSteps.enumerated()), id: \.element.id) { index, step in
-                ResearchStepCard(step: step, index: index)
+                researchStepRow(step: step, index: index)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private func researchStepRow(step: ResearchStep, index: Int) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            assistantAvatar
+
+            HStack(spacing: 10) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(step.isComplete ? Color.vsGreen.opacity(0.15) : Color.vsOrange.opacity(0.15))
+                        .frame(width: 24, height: 24)
+                    
+                    if step.isComplete {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.vsGreen)
+                    } else {
+                        Image(systemName: step.icon)
+                            .font(.system(size: 12))
+                            .foregroundColor(.vsOrange)
+                    }
+                }
+
+                Text(step.title)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .opacity(step.delay == 0 || step.isComplete ? 1 : 0)
+            .offset(y: step.delay == 0 || step.isComplete ? 0 : 10)
+            .onAppear {
+                if step.delay > 0 {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(step.delay)) {
+                        // Animation handled by opacity/offset
+                    }
+                }
+            }
+            .onChange(of: step.isComplete) { _, newValue in
+                if newValue {
+                    withAnimation(.spring(response: 0.3)) {
+                        // Mark complete
+                    }
+                }
             }
         }
     }
 
     // MARK: - Typing Indicator
 
-    private var typingIndicator: some View {
-        HStack {
+    private var typingIndicatorRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            assistantAvatar
+
             HStack(spacing: 4) {
                 ForEach(0..<3) { i in
                     Circle()
-                        .fill(Color.vsDarkGray)
+                        .fill(Color.secondary)
                         .frame(width: 8, height: 8)
                         .opacity(0.6)
                 }
             }
-            .padding(14)
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            Spacer(minLength: 60)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - Input Bar (ChatGPT style)
+
+    private var inputBar: some View {
+        VStack(spacing: 8) {
+            // Mode toggle (subtle, above input)
+            if appState.chatMessages.isEmpty || appState.chatMessages.count == 1 {
+                modeToggle
+            }
+
+            HStack(spacing: 12) {
+                // Deep research indicator (subtle)
+                if appState.isDeepResearchMode {
+                    Button {
+                        appState.isDeepResearchMode.toggle()
+                    } label: {
+                        Image(systemName: "sparkle.magnifyingglass")
+                            .font(.system(size: 16))
+                            .foregroundColor(.vsOrange)
+                            .padding(8)
+                            .background(Color.vsOrange.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                }
+
+                // Text field
+                TextField(
+                    hasAnalysisContext ? "Ask about this screenshot…" : "Message VerifyShot…",
+                    text: $inputText,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
+                .font(.body)
+                .lineLimit(1...6)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .focused($isInputFocused)
+                .onSubmit {
+                    if canSendChat {
+                        sendMessage()
+                    }
+                }
+
+                // Send button
+                Button {
+                    sendMessage()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(canSendChat ? Color.vsOrange : Color(uiColor: .tertiarySystemFill))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(canSendChat ? .white : .secondary)
+                    }
+                }
+                .disabled(!canSendChat)
+            }
         }
     }
 
-    // MARK: - Input Bar
-
-    private var inputBar: some View {
-        HStack(spacing: 12) {
-            // Deep research indicator
-            if appState.isDeepResearchMode {
-                Image(systemName: "sparkle.magnifyingglass")
+    private var modeToggle: some View {
+        HStack(spacing: 8) {
+            Button {
+                appState.isDeepResearchMode = false
+            } label: {
+                Text("Standard")
                     .font(.caption)
-                    .foregroundColor(.vsOrange)
-                    .padding(8)
-                    .background(Color.vsOrange.opacity(0.1))
-                    .clipShape(Circle())
+                    .foregroundColor(appState.isDeepResearchMode ? .secondary : .vsOrange)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        appState.isDeepResearchMode
+                            ? Color.clear
+                            : Color.vsOrange.opacity(0.1)
+                    )
+                    .clipShape(Capsule())
             }
-
-            TextField(hasAnalysisContext ? "Ask about this screenshot…" : "Ask me to verify a claim…", text: $inputText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...4)
-                .focused($isInputFocused)
-                .onSubmit { sendMessage() }
 
             Button {
-                sendMessage()
+                appState.isDeepResearchMode = true
             } label: {
-                Circle()
-                    .fill(canSendChat ? Color.vsNavy : Color.vsGray)
-                    .frame(width: 36, height: 36)
-                    .overlay(
-                        Image(systemName: "arrow.up")
-                            .font(.body.bold())
-                            .foregroundColor(canSendChat ? .white : .vsDarkGray)
-                    )
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkle.magnifyingglass")
+                        .font(.system(size: 10))
+                    Text("Deep Research")
+                        .font(.caption)
+                }
+                .foregroundColor(appState.isDeepResearchMode ? .vsOrange : .secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    appState.isDeepResearchMode
+                        ? Color.vsOrange.opacity(0.1)
+                        : Color.clear
+                )
+                .clipShape(Capsule())
             }
-            .disabled(!canSendChat)
         }
-        .padding(12)
-        .background(Color.white)
     }
 
     private var canSendChat: Bool {
@@ -354,70 +478,7 @@ struct ChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         inputText = ""
+        isInputFocused = false
         appState.sendChatMessage(text)
-    }
-}
-
-// MARK: - Research Step Card
-
-struct ResearchStepCard: View {
-    let step: ResearchStep
-    let index: Int
-    @State private var isVisible = false
-    @State private var isComplete = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(isComplete ? Color.vsGreen.opacity(0.15) : Color.vsOrange.opacity(0.15))
-                    .frame(width: 40, height: 40)
-                
-                if isComplete {
-                    Image(systemName: "checkmark")
-                        .font(.caption.bold())
-                        .foregroundColor(.vsGreen)
-                } else {
-                    Image(systemName: step.icon)
-                        .font(.caption)
-                        .foregroundColor(.vsOrange)
-                }
-            }
-
-            Text(step.title)
-                .font(.subheadline)
-                .foregroundColor(.vsNavy)
-
-            Spacer()
-        }
-        .padding(12)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
-        .opacity(isVisible ? 1 : 0)
-        .offset(y: isVisible ? 0 : 10)
-        .onAppear {
-            // Animate in with delay
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(step.delay)) {
-                isVisible = true
-            }
-            
-            // Mark as complete when step.isComplete changes
-            if step.isComplete {
-                DispatchQueue.main.asyncAfter(deadline: .now() + step.delay + 0.3) {
-                    withAnimation(.spring(response: 0.3)) {
-                        isComplete = true
-                    }
-                }
-            }
-        }
-        .onChange(of: step.isComplete) { _, newValue in
-            if newValue {
-                withAnimation(.spring(response: 0.3)) {
-                    isComplete = true
-                }
-            }
-        }
     }
 }
