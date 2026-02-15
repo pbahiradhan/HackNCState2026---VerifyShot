@@ -316,8 +316,18 @@ Analyze this content and return the JSON response.`;
     // Validate we got at least one claim
     if (claims.length === 0) {
       console.error("[Backboard] ❌ No claims extracted from response!");
+      console.error("[Backboard] Parsed object:", JSON.stringify(parsed).slice(0, 500));
       throw new Error("Backboard returned no claims. Check the prompt and response format.");
     }
+    
+    // Log final extracted data
+    console.log("[Backboard] ✅ Successfully extracted:", {
+      claimsCount: claims.length,
+      avgConfidence: (claims.reduce((sum, c) => sum + c.confidence, 0) / claims.length).toFixed(2),
+      hasSummary: !!parsed.summary,
+      hasBias: !!parsed.biasAssessment,
+      modelConsensusCount: parsed.modelConsensus?.length || 0,
+    });
     
     return {
       claims,
