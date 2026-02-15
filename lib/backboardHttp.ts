@@ -213,7 +213,7 @@ Analyze this content and return the JSON response.`;
   console.log("[Backboard] Full API response keys:", Object.keys(resp));
   console.log("[Backboard] Response status:", resp.status);
   console.log("[Backboard] Response content type:", typeof resp.content);
-  console.log("[Backboard] Response content preview:", JSON.stringify(resp).slice(0, 500));
+  console.log("[Backboard] Full response (first 2000 chars):", JSON.stringify(resp).slice(0, 2000));
 
   // Backboard API might return content in different formats
   // Try multiple possible fields
@@ -234,7 +234,8 @@ Analyze this content and return the JSON response.`;
   }
   
   console.log("[Backboard] Extracted content length:", content.length);
-  console.log("[Backboard] Content preview:", content.slice(0, 500));
+  console.log("[Backboard] Raw content (first 1000 chars):", content.slice(0, 1000));
+  console.log("[Backboard] Raw content (last 500 chars):", content.slice(-500));
 
   // Validate we have content
   if (!content || content.length < 10) {
@@ -251,40 +252,89 @@ Analyze this content and return the JSON response.`;
     console.error("[Backboard] This suggests Backboard ignored the JSON-only instruction");
   }
 
-  // Strip markdown code fences if present
+  // Clean up the content - handle various edge cases
+  // Remove markdown code fences
   if (content.startsWith("```")) {
-    content = content.replace(/```(?:json)?\n?/g, "").trim();
+    content = content.replace(/```(?:json)?\n?/g, "").replace(/```$/g, "").trim();
   }
-
-  // Try multiple strategies to extract JSON
-  let jsonContent = content;
   
-  // Strategy 1: Look for JSON object
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    jsonContent = jsonMatch[0];
-  } else {
-    // Strategy 2: Maybe it's wrapped in text - try to find the JSON part
-    const jsonStart = content.indexOf('{');
-    const jsonEnd = content.lastIndexOf('}');
-    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-      jsonContent = content.substring(jsonStart, jsonEnd + 1);
-      console.log("[Backboard] Extracted JSON from wrapped text");
-    } else {
-      // Strategy 3: Maybe Backboard returned plain text, not JSON
-      console.error("[Backboard] ⚠️ No JSON found - Backboard may have returned plain text");
-      console.error("[Backboard] Full content:", content);
-      // Don't throw yet - try to parse anyway
-      jsonContent = content;
-    }
+  // Remove any leading/trailing whitespace and newlines
+  content = content.trim();
+  
+  // Fix common JSON issues:
+  // 1. Remove escaped quotes that might be in the string
+  // 2. Fix any weird encoding issues
+  // 3. Remove any text before the first {
+  
+  // Find the first { and last }
+  const firstBrace = content.indexOf('{');
+  const lastBrace = content.lastIndexOf('}');
+  
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    console.error("[Backboard] ⚠️ No valid JSON braces found");
+    console.error("[Backboard] Content:", content);
+    throw new Error("Backboard response does not contain valid JSON structure");
   }
+  
+  // Extract just the JSON part
+  let jsonContent = content.substring(firstBrace, lastBrace + 1);
+  
+  // Try to fix common JSON formatting issues
+  // Remove any escaped quotes that shouldn't be there
+  // But be careful - we don't want to break valid escaped quotes inside strings
+  // For now, just log what we have
+  console.log("[Backboard] Extracted JSON (first 500 chars):", jsonContent.slice(0, 500));
+  console.log("[Backboard] Extracted JSON (last 500 chars):", jsonContent.slice(-500));
   
   content = jsonContent;
 
+  // Try to parse JSON with better error handling
+  let parsed: any;
   try {
-    const parsed = JSON.parse(content);
+    parsed = JSON.parse(content);
     console.log("[Backboard] ✅ Parsed JSON successfully");
-    console.log("[Backboard] Parsed keys:", Object.keys(parsed));
+  } catch (parseError: any) {
+    // If parsing fails, try to fix common issues
+    console.error("[Backboard] ❌ Initial JSON parse failed:", parseError.message);
+    console.error("[Backboard] Parse error at position:", parseError.message.match(/position (\d+)/)?.[1]);
+    
+    // Try to fix escaped quotes issue - sometimes Backboard returns JSON with escaped quotes
+    let fixedContent = content;
+    
+    // Strategy 1: Remove any single quotes that might be escaping double quotes incorrectly
+    // But only if they're at the start/end of property names
+    fixedContent = fixedContent.replace(/\\'/g, "'");
+    
+    // Strategy 2: Fix any double-escaped quotes
+    fixedContent = fixedContent.replace(/\\\\"/g, '\\"');
+    
+    // Strategy 3: Try to fix any weird newline issues
+    fixedContent = fixedContent.replace(/\\n\s*\\n/g, '\\n');
+    
+    console.log("[Backboard] Attempting to fix JSON...");
+    console.log("[Backboard] Fixed content (first 500 chars):", fixedContent.slice(0, 500));
+    
+    try {
+      parsed = JSON.parse(fixedContent);
+      console.log("[Backboard] ✅ Parsed JSON successfully after fixes");
+    } catch (secondError: any) {
+      // Still failed - log the exact content for debugging
+      console.error("[Backboard] ❌ JSON parse failed even after fixes");
+      console.error("[Backboard] Second error:", secondError.message);
+      console.error("[Backboard] Content around error position:", 
+        fixedContent.slice(Math.max(0, parseInt(parseError.message.match(/position (\d+)/)?.[1] || "0") - 50), 
+        parseInt(parseError.message.match(/position (\d+)/)?.[1] || "0") + 50));
+      throw new Error(
+        `Failed to parse Backboard JSON: ${parseError.message}. ` +
+        `Content preview: ${content.slice(0, 200)}... ` +
+        `Full content length: ${content.length}. ` +
+        `Check Vercel logs for full response.`
+      );
+    }
+  }
+  
+  // Now continue with the parsed object
+  console.log("[Backboard] Parsed keys:", Object.keys(parsed));
     console.log("[Backboard] Claims count:", parsed.claims?.length || 0);
     
     // Validate and log each claim
